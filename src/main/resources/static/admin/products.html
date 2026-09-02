@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Products — FreshMeat Admin</title>
+    <link rel="icon" type="image/png" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🥩</text></svg>">
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.3/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+    <link rel="stylesheet" href="/admin/css/admin.css">
+</head>
+<body>
+
+<div id="admin-shell"></div>
+
+<!-- Product edit modal -->
+<div class="modal fade" id="productModal" tabindex="-1">
+  <div class="modal-dialog modal-lg modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="productModalTitle">Add Product</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="row g-3">
+          <div class="col-md-8">
+            <label class="form-label">Product Name *</label>
+            <input type="text" class="form-control form-control-fm" id="p-name" maxlength="150">
+          </div>
+          <div class="col-md-4">
+            <label class="form-label">Category *</label>
+            <select class="form-select form-control-fm" id="p-category"></select>
+          </div>
+          <div class="col-12">
+            <label class="form-label">Short Description</label>
+            <input type="text" class="form-control form-control-fm" id="p-short" maxlength="40" placeholder="e.g. Farm fresh, cleaned & cut">
+          </div>
+          <div class="col-12">
+            <label class="form-label">Full Description</label>
+            <textarea class="form-control form-control-fm" id="p-desc" rows="2"></textarea>
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">Price / Kg (₹) *</label>
+            <input type="number" class="form-control form-control-fm" id="p-price" min="0" step="0.01">
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">Discount %</label>
+            <input type="number" class="form-control form-control-fm" id="p-discount" min="0" max="90" value="0">
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">Stock (KG) *</label>
+            <input type="number" class="form-control form-control-fm" id="p-stock" min="0">
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">Min Order (KG)</label>
+            <input type="number" class="form-control form-control-fm" id="p-minqty" min="1" value="1">
+          </div>
+          <div class="col-12">
+            <label class="form-label">Cutting Options (comma separated)</label>
+            <input type="text" class="form-control form-control-fm" id="p-cuts" placeholder="e.g. CURRY_CUT, BONELESS, WITH_SKIN">
+          </div>
+          <div class="col-md-8">
+            <div class="d-flex align-items-end gap-3">
+              <div style="width:90px;height:90px;border-radius:10px;overflow:hidden;background:var(--bg);flex-shrink:0;">
+                <img id="p-img-preview" src="https://placehold.co/600x600/2d2d2d/f5f0e8?text=IMG" style="width:100%;height:100%;object-fit:cover;display:block;">
+              </div>
+              <div class="flex-grow-1">
+                <label class="form-label">Product Image</label>
+                <input type="file" class="form-control form-control-fm" id="p-img-input" accept="image/*">
+              </div>
+            </div>
+          </div>
+          <div class="col-md-4 d-flex align-items-end gap-3">
+            <div class="form-check">
+              <input class="form-check-input" type="checkbox" id="p-available" checked>
+              <label class="form-check-label small" for="p-available">Available for sale</label>
+            </div>
+            <div class="form-check">
+              <input class="form-check-input" type="checkbox" id="p-fresh" checked>
+              <label class="form-check-label small" for="p-fresh">Fresh Today</label>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-admin-outline" data-bs-dismiss="modal">Cancel</button>
+        <button class="btn-admin" id="save-product-btn">Save Product</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.3/js/bootstrap.bundle.min.js"></script>
+<script src="/js/app.js"></script>
+<script src="/admin/js/admin-app.js"></script>
+<script src="/admin/js/products.js"></script>
+</body>
+</html>

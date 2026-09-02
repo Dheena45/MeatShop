@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Shop — FreshMeat</title>
+    <link rel="icon" type="image/png" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🥩</text></svg>">
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.3/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+    <link rel="stylesheet" href="/css/style.css">
+    <style>
+        .shop-hero { background: linear-gradient(135deg, #2b0a0a, #581010); color:#fff; padding: 2.4rem 0; }
+        .shop-hero h1 { color:#fff; font-weight:700; }
+        .shop-hero p { color: rgba(255,255,255,.75); margin:0; }
+        .price-inputs input { width: 90px; }
+    </style>
+</head>
+<body>
+
+<div id="shared-header"></div>
+
+<section class="shop-hero">
+    <div class="container">
+        <h1 class="mb-1">Shop Fresh Cuts</h1>
+        <p>Pick your favourite meat, choose your cut, and we'll deliver it fresh. </p>
+    </div>
+</section>
+
+<section class="section-pad pt-4">
+    <div class="container">
+        <div class="row g-4">
+            <!-- FILTERS -->
+            <div class="col-lg-3">
+                <div class="filter-card">
+                    <h6><i class="fa-solid fa-magnifying-glass me-1"></i> Search</h6>
+                    <input type="text" id="shop-search" class="search-bar-lg" placeholder="Search chicken, mutton, fish...">
+                </div>
+
+                <div class="filter-card">
+                    <h6><i class="fa-solid fa-layer-group me-1"></i> Category</h6>
+                    <div id="filter-categories" class="d-flex flex-column gap-1"></div>
+                </div>
+
+                <div class="filter-card">
+                    <h6><i class="fa-solid fa-indian-rupee-sign me-1"></i> Price Range</h6>
+                    <div class="d-flex align-items-center justify-content-between price-inputs mb-2">
+                        <label class="text-muted small mb-0">Min</label>
+                        <input type="number" id="min-price" class="form-control form-control-fm" min="0" placeholder="0">
+                        <label class="text-muted small mb-0 mx-1">Max</label>
+                        <input type="number" id="max-price" class="form-control form-control-fm" min="0" placeholder="9999">
+                    </div>
+                    <input type="range" class="form-range" id="price-slider" min="0" max="1000" value="1000">
+                    <button class="btn btn-fm w-100 mt-2" onclick="applyFilters()">Apply Price</button>
+                </div>
+
+                <div class="filter-card">
+                    <h6><i class="fa-solid fa-star me-1"></i> Minimum Rating</h6>
+                    <div id="rating-filters" class="d-flex flex-column gap-1"></div>
+                </div>
+
+                <div class="filter-card">
+                    <h6><i class="fa-solid fa-circle-check me-1"></i> Availability</h6>
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" value="" id="in-stock">
+                        <label class="form-check-label" for="in-stock">In stock only</label>
+                    </div>
+                </div>
+
+                <button class="btn btn-fm-outline w-100" onclick="resetFilters()"><i class="fa-solid fa-rotate-left me-1"></i> Clear Filters</button>
+            </div>
+
+            <!-- PRODUCTS -->
+            <div class="col-lg-9">
+                <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+                    <div><strong id="result-count">0</strong> <span class="text-muted small">products found</span></div>
+                    <select id="sort-select" class="form-select form-control-fm" style="width:auto" onchange="applyFilters()">
+                        <option value="default">Sort: Newest</option>
+                        <option value="popularity">Most Popular</option>
+                        <option value="price_asc">Price: Low to High</option>
+                        <option value="price_desc">Price: High to Low</option>
+                        <option value="rating">Highest Rated</option>
+                    </select>
+                </div>
+                <div id="products-grid" class="row g-3">
+                    <div class="col-12 text-center"><div class="loader-spinner"></div></div>
+                </div>
+                <div id="shop-pagination" class="pagination-fm"></div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<div id="shared-footer"></div>
+
+<div class="modal fade" id="quickViewModal" tabindex="-1">
+  <div class="modal-dialog modal-lg modal-dialog-centered">
+    <div class="modal-content"><div id="quick-view-body"></div></div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.3/js/bootstrap.bundle.min.js"></script>
+<script src="/js/app.js"></script>
+<script src="/js/shop.js"></script>
+</body>
+</html>

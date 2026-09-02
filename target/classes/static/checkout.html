@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Checkout — FreshMeat</title>
+    <link rel="icon" type="image/png" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🥩</text></svg>">
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.3/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+
+<div id="shared-header"></div>
+
+<section class="section-pad pt-4">
+    <div class="container">
+        <h1 class="section-title mb-4">Checkout</h1>
+        <div id="checkout-loading"><div class="loader-spinner"></div></div>
+
+        <div id="checkout-content" class="d-none">
+            <div class="row g-4">
+                <div class="col-lg-8">
+                    <!-- STEP 1 -->
+                    <div class="checkout-step">
+                        <h5><span class="step-num">1</span> Customer Information</h5>
+                        <div class="row g-3 mt-2">
+                            <div class="col-md-4">
+                                <label class="form-label">Full Name</label>
+                                <input type="text" id="co-name" class="form-control form-control-fm" placeholder="Your full name">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">Mobile Number</label>
+                                <input type="tel" id="co-phone" class="form-control form-control-fm" maxlength="10" placeholder="10-digit mobile">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">Email</label>
+                                <input type="email" id="co-email" class="form-control form-control-fm" placeholder="you@example.com">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- STEP 2 -->
+                    <div class="checkout-step">
+                        <h5><span class="step-num">2</span> Delivery Address</h5>
+                        <div class="mb-3"><a href="#" onclick="return false;" class="small text-danger"><i class="fa-solid fa-location-dot me-1"></i>Use Saved Address</a></div>
+                        <div id="saved-addresses"></div>
+                        <div class="row g-3">
+                            <div class="col-md-4">
+                                <label class="form-label">Door / House No.</label>
+                                <input type="text" id="co-door" class="form-control form-control-fm" placeholder="12-A">
+                            </div>
+                            <div class="col-md-8">
+                                <label class="form-label">Street</label>
+                                <input type="text" id="co-street" class="form-control form-control-fm" placeholder="Street name">
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Area</label>
+                                <input type="text" id="co-area" class="form-control form-control-fm" placeholder="Area / locality">
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">City</label>
+                                <input type="text" id="co-city" class="form-control form-control-fm" placeholder="City">
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">State</label>
+                                <input type="text" id="co-state" class="form-control form-control-fm" placeholder="State">
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Pincode</label>
+                                <input type="text" id="co-pincode" class="form-control form-control-fm" maxlength="6" placeholder="6-digit pincode">
+                            </div>
+                        </div>
+                        <div class="form-check mt-3">
+                            <input class="form-check-input" type="checkbox" id="co-save-address">
+                            <label class="form-check-label small" for="co-save-address">Save this address to my profile</label>
+                        </div>
+                    </div>
+
+                    <!-- STEP 3 -->
+                    <div class="checkout-step">
+                        <h5><span class="step-num">3</span> Delivery Slot</h5>
+                        <p class="text-muted small mb-3">Pick a delivery window for today.</p>
+                        <div class="row g-2" id="delivery-slots">
+                            <div class="col-6 col-md-4"><div class="slot-option" data-slot="8 AM - 10 AM">8 AM – 10 AM</div></div>
+                            <div class="col-6 col-md-4"><div class="slot-option" data-slot="10 AM - 12 PM">10 AM – 12 PM</div></div>
+                            <div class="col-6 col-md-4"><div class="slot-option" data-slot="12 PM - 2 PM">12 PM – 2 PM</div></div>
+                            <div class="col-6 col-md-4"><div class="slot-option" data-slot="4 PM - 6 PM">4 PM – 6 PM</div></div>
+                            <div class="col-6 col-md-4"><div class="slot-option" data-slot="6 PM - 8 PM">6 PM – 8 PM</div></div>
+                        </div>
+                    </div>
+
+                    <!-- STEP 4 -->
+                    <div class="checkout-step">
+                        <h5><span class="step-num">4</span> Payment Method</h5>
+                        <div class="pay-option selected" data-pay="CASH_ON_DELIVERY">
+                            <i class="fa-solid fa-hand-holding-dollar fs-4" style="color:var(--success)"></i>
+                            <div>
+                                <strong>Cash on Delivery</strong>
+                                <div class="text-muted small">Pay in cash when your order arrives. UPI/online payment coming soon.</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="checkout-step">
+                        <h5><span class="step-num">5</span> Notes (Optional)</h5>
+                        <textarea class="form-control form-control-fm" id="co-notes" rows="2" placeholder="Any delivery instructions..."></textarea>
+                    </div>
+                </div>
+
+                <!-- ORDER SUMMARY -->
+                <div class="col-lg-4">
+                    <div class="summary-card">
+                        <h5>Order Summary</h5>
+                        <div id="co-items" class="mt-2 mb-2"></div>
+                        <div class="summary-divider"></div>
+                        <div class="summary-line"><span>Subtotal</span><span id="co-subtotal">₹0.00</span></div>
+                        <div class="summary-line muted"><span>Discount</span><span id="co-discount" class="text-success">- ₹0.00</span></div>
+                        <div class="summary-line muted"><span>Delivery Charge</span><span id="co-delivery">₹0.00</span></div>
+                        <div class="summary-divider"></div>
+                        <div class="summary-total"><span>Grand Total</span><span id="co-total">₹0.00</span></div>
+                        <small class="text-muted d-block mt-1">Cash on Delivery</small>
+                        <button class="btn btn-fm w-100 btn-fm-lg mt-3" id="place-order-btn" onclick="placeOrder()">
+                            <i class="fa-solid fa-check me-1"></i>Place Order</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<div id="shared-footer"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.3/js/bootstrap.bundle.min.js"></script>
+<script src="/js/app.js"></script>
+<script src="/js/checkout.js"></script>
+</body>
+</html>

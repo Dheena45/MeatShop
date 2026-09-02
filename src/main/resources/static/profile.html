@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My Profile — FreshMeat</title>
+    <link rel="icon" type="image/png" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🥩</text></svg>">
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.3/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+
+<div id="shared-header"></div>
+
+<section class="section-pad pt-4">
+    <div class="container">
+        <div id="profile-loading"><div class="loader-spinner"></div></div>
+        <div id="profile-content" class="d-none">
+            <div class="row g-4">
+                <div class="col-lg-3">
+                    <div class="profile-sidebar">
+                        <div class="text-center mb-3">
+                            <div id="profile-avatar" class="profile-avatar"></div>
+                            <h6 id="profile-name" class="fw-bold mb-0"></h6>
+                            <small class="text-muted" id="profile-email"></small>
+                        </div>
+                        <div class="profile-menu">
+                            <a class="nav-link active" href="#" data-tab="personal"><i class="fa-solid fa-user me-2"></i>Personal Info</a>
+                            <a class="nav-link" href="#" data-tab="addresses"><i class="fa-solid fa-location-dot me-2"></i>Saved Addresses</a>
+                            <a class="nav-link" href="#" data-tab="orders"><i class="fa-solid fa-box me-2"></i>Order History</a>
+                            <a class="nav-link" href="#" data-tab="password"><i class="fa-solid fa-key me-2"></i>Change Password</a>
+                            <a class="nav-link" href="/orders.html"><i class="fa-solid fa-truck me-2"></i>My Orders</a>
+                            <hr>
+                            <a class="nav-link text-danger" href="#" id="profile-logout"><i class="fa-solid fa-right-from-bracket me-2"></i>Logout</a>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-lg-9">
+                    <!-- PERSONAL -->
+                    <div class="card card-fm p-4 tab-pane active" id="tab-personal">
+                        <h5 style="font-family:var(--font-body);font-weight:600;">Personal Information</h5>
+                        <div class="row g-3 mt-2">
+                            <div class="col-md-6">
+                                <label class="form-label">Full Name</label>
+                                <input type="text" class="form-control form-control-fm" id="pf-name">
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Mobile Number</label>
+                                <input type="tel" class="form-control form-control-fm" id="pf-phone" maxlength="10">
+                            </div>
+                            <div class="col-12">
+                                <label class="form-label">Email</label>
+                                <input type="email" class="form-control form-control-fm" id="pf-email" disabled>
+                            </div>
+                        </div>
+                        <button class="btn btn-fm mt-4" onclick="saveProfile()"><i class="fa-solid fa-floppy-disk me-1"></i>Save Changes</button>
+                    </div>
+
+                    <!-- ADDRESSES -->
+                    <div class="card card-fm p-4 tab-pane d-none" id="tab-addresses">
+                        <h5 style="font-family:var(--font-body);font-weight:600;">Saved Addresses</h5>
+                        <div id="address-list" class="mt-3"></div>
+                        <hr>
+                        <h6 class="fw-bold">Add New Address</h6>
+                        <div class="row g-3 mt-1">
+                            <div class="col-md-4">
+                                <label class="form-label">Label</label>
+                                <input type="text" class="form-control form-control-fm" id="ad-label" placeholder="Home / Office">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">Door No.</label>
+                                <input type="text" class="form-control form-control-fm" id="ad-door">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">Street</label>
+                                <input type="text" class="form-control form-control-fm" id="ad-street">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">Area</label>
+                                <input type="text" class="form-control form-control-fm" id="ad-area">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">City</label>
+                                <input type="text" class="form-control form-control-fm" id="ad-city">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">State</label>
+                                <input type="text" class="form-control form-control-fm" id="ad-state">
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Pincode</label>
+                                <input type="text" class="form-control form-control-fm" id="ad-pincode" maxlength="6">
+                            </div>
+                            <div class="col-md-6 d-flex align-items-end">
+                                <button class="btn btn-fm" onclick="addAddress()"><i class="fa-solid fa-plus me-1"></i>Add Address</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- ORDERS TAB -->
+                    <div class="card card-fm p-4 tab-pane d-none" id="tab-orders">
+                        <div id="profile-orders"></div>
+                    </div>
+
+                    <!-- PASSWORD -->
+                    <div class="card card-fm p-4 tab-pane d-none" id="tab-password">
+                        <h5 style="font-family:var(--font-body);font-weight:600;">Change Password</h5>
+                        <div class="row g-3 mt-2" style="max-width:420px;">
+                            <div class="col-12">
+                                <label class="form-label">Current Password</label>
+                                <input type="password" class="form-control form-control-fm" id="pw-current">
+                            </div>
+                            <div class="col-12">
+                                <label class="form-label">New Password</label>
+                                <input type="password" class="form-control form-control-fm" id="pw-new">
+                            </div>
+                            <div class="col-12">
+                                <label class="form-label">Confirm New Password</label>
+                                <input type="password" class="form-control form-control-fm" id="pw-confirm">
+                            </div>
+                        </div>
+                        <button class="btn btn-fm mt-4" onclick="changePassword()"><i class="fa-solid fa-key me-1"></i>Update Password</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<div id="shared-footer"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.3/js/bootstrap.bundle.min.js"></script>
+<script src="/js/app.js"></script>
+<script src="/js/profile.js"></script>
+</body>
+</html>

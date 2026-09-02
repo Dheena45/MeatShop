@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FreshMeat — Fresh Cuts. Honest Prices. Delivered Fast.</title>
+    <link rel="icon" type="image/png" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🥩</text></svg>">
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.3/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+
+<div id="shared-header"></div>
+
+<!-- HERO -->
+<section class="hero-section">
+    <div class="container">
+        <div class="row align-items-center gy-5">
+            <div class="col-lg-7">
+                <span class="hero-badge"><i class="fa-solid fa-leaf"></i> 100% Fresh • Hygienically Processed</span>
+                <h1 class="hero-title">Fresh Meat, Delivered to <span class="accent">Your Door</span>.</h1>
+                <p class="hero-sub">Premium quality meat, hygienically prepared and delivered fresh to your doorstep. Choose your cut, pick your slot, we take care of the rest.</p>
+                <div class="d-flex gap-3 flex-wrap mt-4">
+                    <a href="/shop.html" class="btn btn-fm-gold btn-fm-lg">Shop Now <i class="fa-solid fa-arrow-right ms-1"></i></a>
+                    <a href="#categories" class="btn btn-fm-outline-light btn-fm-lg">Explore Categories</a>
+                </div>
+                <div class="hero-stats">
+                    <div class="hero-stat"><h3>500+</h3><span>Premium Cuts</span></div>
+                    <div class="hero-stat"><h3>10K+</h3><span>Happy Customers</span></div>
+                    <div class="hero-stat"><h3>45 min</h3><span>Avg. Delivery</span></div>
+                </div>
+            </div>
+            <div class="col-lg-5">
+                <div class="hero-img-wrap">
+                    <div class="hero-card">
+                        <img src="https://placehold.co/700x500/2b0a0a/ffffff?text=Choice+Cuts%0AFresh+Daily" alt="Fresh meat selection">
+                    </div>
+                    <div class="float-tag f1"><i class="fa-solid fa-temperature-high mini-icon"></i>Flash Fresh<br><small style="color:var(--muted)">Chilled 0–4°C</small></div>
+                    <div class="float-tag f2"><i class="fa-solid fa-truck-fast mini-icon"></i>Free Delivery<br><small style="color:var(--muted)">Orders above ₹499</small></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- TRUST BAR -->
+<section class="trust-bar">
+    <div class="container">
+        <div class="row g-3">
+            <div class="col-6 col-lg-3"><div class="t-item"><i class="fa-solid fa-shield-halved"></i> 100% Fresh Guaranteed</div></div>
+            <div class="col-6 col-lg-3"><div class="t-item"><i class="fa-solid fa-droplet"></i> Hygienically Processed</div></div>
+            <div class="col-6 col-lg-3"><div class="t-item"><i class="fa-solid fa-certificate"></i> Quality Assured</div></div>
+            <div class="col-6 col-lg-3"><div class="t-item"><i class="fa-solid fa-truck-fast"></i> Fast &amp; Secure Delivery</div></div>
+        </div>
+    </div>
+</section>
+
+<!-- CATEGORIES -->
+<section class="section-pad" id="categories">
+    <div class="container">
+        <div class="section-title-wrap">
+            <span class="section-eyebrow">Shop by Category</span>
+            <h2 class="section-title">Fresh Across Every Category</h2>
+            <p class="section-sub">From everyday essentials to festive specialties, explore our full range of premium cuts.</p>
+        </div>
+        <div id="categories-grid" class="row g-3">
+            <div class="col-12 text-center"><div class="loader-spinner"></div></div>
+        </div>
+    </div>
+</section>
+
+<!-- BEST SELLERS -->
+<section class="section-pad section-alt" id="best-sellers">
+    <div class="container">
+        <div class="d-flex flex-wrap justify-content-between align-items-end mb-4">
+            <div>
+                <span class="section-eyebrow">Customer Favourites</span>
+                <h2 class="section-title mb-0">Best Sellers</h2>
+            </div>
+            <a href="/shop.html" class="btn btn-fm-outline">View All Products</a>
+        </div>
+        <div id="bestsellers-grid" class="row g-3">
+            <div class="col-12 text-center"><div class="loader-spinner"></div></div>
+        </div>
+    </div>
+</section>
+
+<!-- TODAY'S OFFERS -->
+<section class="section-pad" id="offers-section">
+    <div class="container">
+        <div class="section-title-wrap">
+            <span class="section-eyebrow">Limited Time</span>
+            <h2 class="section-title">Today's Offers</h2>
+            <p class="section-sub">Grab the best deals of the week before they're gone.</p>
+        </div>
+        <div class="offer-banner mb-4">
+            <div class="offer-tag">UP TO<br>20% OFF</div>
+            <span class="hero-badge"><i class="fa-solid fa-bolt"></i> Weekend Special</span>
+            <h2 class="mt-3">Weekend Meat Fest</h2>
+            <p class="offer-sub mb-3">Up to 20% OFF on selected products. Free delivery on orders above ₹499.</p>
+            <span class="offer-code">CODE: FRESH20</span> &nbsp;
+            <a href="/shop.html" class="btn btn-fm-gold btn-fm-lg mt-3">Shop the Deal</a>
+        </div>
+        <div id="offers-products" class="row g-3">
+            <div class="col-12 text-center"><div class="loader-spinner"></div></div>
+        </div>
+    </div>
+</section>
+
+<!-- POPULAR NEAR YOU -->
+<section class="section-pad section-alt" id="popular-section">
+    <div class="container">
+        <div class="section-title-wrap">
+            <span class="section-eyebrow">Local Favourites</span>
+            <h2 class="section-title">Popular Near You</h2>
+            <p class="section-sub">The most-ordered products by customers in your area.</p>
+        </div>
+        <div id="popular-grid" class="row g-3">
+            <div class="col-12 text-center"><div class="loader-spinner"></div></div>
+        </div>
+    </div>
+</section>
+
+<!-- WHY CHOOSE US -->
+<section class="section-pad">
+    <div class="container">
+        <div class="section-title-wrap">
+            <span class="section-eyebrow">Why FreshMeat</span>
+            <h2 class="section-title">Why Choose FreshMeat?</h2>
+            <p class="section-sub">We obsess over freshness so you can focus on great food.</p>
+        </div>
+        <div class="row g-3">
+            <div class="col-6 col-md-4 col-lg-2">
+                <div class="card card-fm why-card">
+                    <div class="why-icon"><i class="fa-solid fa-leaf"></i></div>
+                    <h6>100% Fresh</h6><p>Cut fresh every morning</p>
+                </div>
+            </div>
+            <div class="col-6 col-md-4 col-lg-2">
+                <div class="card card-fm why-card">
+                    <div class="why-icon"><i class="fa-solid fa-droplet"></i></div>
+                    <h6>Hygienically Processed</h6><p>FDA-grade facility</p>
+                </div>
+            </div>
+            <div class="col-6 col-md-4 col-lg-2">
+                <div class="card card-fm why-card">
+                    <div class="why-icon"><i class="fa-solid fa-certificate"></i></div>
+                    <h6>Quality Assured</h6><p>Vet-inspected stock</p>
+                </div>
+            </div>
+            <div class="col-6 col-md-4 col-lg-2">
+                <div class="card card-fm why-card">
+                    <div class="why-icon"><i class="fa-solid fa-truck-fast"></i></div>
+                    <h6>Fast Delivery</h6><p>45-minute average</p>
+                </div>
+            </div>
+            <div class="col-6 col-md-4 col-lg-2">
+                <div class="card card-fm why-card">
+                    <div class="why-icon"><i class="fa-solid fa-shield-halved"></i></div>
+                    <h6>Secure Ordering</h6><p>Safe &amp; encrypted</p>
+                </div>
+            </div>
+            <div class="col-6 col-md-4 col-lg-2">
+                <div class="card card-fm why-card">
+                    <div class="why-icon"><i class="fa-solid fa-hand-holding-heart"></i></div>
+                    <h6>Fair Prices</h6><p>Honest per-KG pricing</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- REVIEWS -->
+<section class="section-pad section-alt">
+    <div class="container">
+        <div class="section-title-wrap">
+            <span class="section-eyebrow">Testimonials</span>
+            <h2 class="section-title">What Our Customers Say</h2>
+        </div>
+        <div id="reviews-grid" class="row g-3">
+            <div class="col-12 text-center"><div class="loader-spinner"></div></div>
+        </div>
+    </div>
+</section>
+
+<!-- ABOUT / CONTACT -->
+<section class="section-pad" id="about">
+    <div class="container">
+        <div class="row align-items-center g-5">
+            <div class="col-lg-6">
+                <span class="section-eyebrow">About FreshMeat</span>
+                <h2 class="section-title">From Farm to Your Kitchen, the Honest Way.</h2>
+                <p class="text-muted">FreshMeat was born from a simple belief: everyone deserves access to safe, fresh, honestly-priced meat. We work with verified farms, process in hygienic facilities, and deliver within hours of cutting — not days.</p>
+                <div class="row g-3 mt-3">
+                    <div class="col-sm-6">
+                        <div class="d-flex gap-2 align-items-start">
+                            <i class="fa-solid fa-circle-check text-gold mt-1"></i>
+                            <div><strong>Traceable sourcing</strong><p class="small text-muted mb-0">Every cut traceable to a verified farm.</p></div>
+                        </div>
+                    </div>
+                    <div class="col-sm-6">
+                        <div class="d-flex gap-2 align-items-start">
+                            <i class="fa-solid fa-circle-check text-gold mt-1"></i>
+                            <div><strong>Cold-chain logistics</strong><p class="small text-muted mb-0">Temperature-controlled till your door.</p></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-lg-6" id="contact">
+                <div class="card card-fm p-4">
+                    <h4 style="font-family:var(--font-body);font-weight:600;">Get in Touch</h4>
+                    <p class="text-muted small">Questions about an order or a custom cut? Write to us.</p>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold small">Your Email</label>
+                        <input type="email" class="form-control form-control-fm" id="contact-email" placeholder="you@example.com">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold small">Message</label>
+                        <textarea class="form-control form-control-fm" id="contact-msg" rows="3" placeholder="How can we help?"></textarea>
+                    </div>
+                    <button class="btn btn-fm" onclick="showToast('Thanks! We will get back to you soon.', 'info')">Send Message</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<div id="shared-footer"></div>
+
+<!-- MODALS -->
+<div class="modal fade" id="quickViewModal" tabindex="-1">
+  <div class="modal-dialog modal-lg modal-dialog-centered">
+    <div class="modal-content">
+      <div id="quick-view-body"></div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.3/js/bootstrap.bundle.min.js"></script>
+<script src="/js/app.js"></script>
+<script src="/js/home.js"></script>
+</body>
+</html>
