@@ -19,6 +19,7 @@ public class CartItemDTO {
     private BigDecimal effectiveUnitPrice;
     private BigDecimal subtotal;
     private Integer availableStock;
+    private Integer minOrderQty;
     private boolean available;
 }
 

@@ -1,8 +1,6 @@
 /* FreshMeat — Cart page controller */
 
 let cartData = null;
-const DELIVERY_CHARGE = 40;
-const FREE_DELIVERY_ABOVE = 499;
 
 document.addEventListener('DOMContentLoaded', function () {
     if (!Auth.requireLogin()) return;
@@ -38,13 +36,14 @@ function renderCart(cart) {
             <p>Add some fresh cuts to get started.</p>
             <a href="/shop.html" class="btn btn-fm mt-2">Browse Products</a>
         </div>`;
-        updateSummary(0, 0, 0);
+        updateSummary(cart);
         return;
     }
 
     container.innerHTML = items.map(item => {
         const eff = Number(item.effectiveUnitPrice || item.unitPrice);
-        const discounted = Number(item.unitPrice) > eff;
+        const original = Number(item.unitPrice || eff);
+        const discounted = original > eff;
         const outStock = !item.available || Number(item.availableStock) <= 0;
         const img = item.productImage || 'https://placehold.co/600x600/2d2d2d/f5f0e8?text=FreshMeat';
         return `
@@ -57,7 +56,7 @@ function renderCart(cart) {
             <div class="cl-meta">
               ${item.cuttingOption ? `<span class="badge text-bg-light me-2">${item.cuttingOption.replace(/_/g, ' ')}</span>` : ''}
               Rate: <strong>${fmtMoney(eff)}</strong>/KG
-              ${discounted ? `<span class="text-muted text-decoration-line-through">${fmtMoney(item.unitPrice)}</span>` : ''}
+              ${discounted ? `<span class="text-muted text-decoration-line-through">${fmtMoney(original)}</span>` : ''}
             </div>
             ${outStock ? `<div class="text-danger small mt-1">Only ${item.availableStock} KG left — update quantity</div>` : ''}
           </div>
@@ -70,24 +69,24 @@ function renderCart(cart) {
             </div>
           </div>
           <div class="text-end" style="min-width:100px">
-            <strong>${fmtMoney(item.subtotal)}</strong>
+            <strong>${fmtMoney(Number(item.subtotal || 0))}</strong>
             <div class="text-muted small">${item.quantity} KG</div>
           </div>
         </div>`;
     }).join('');
 
-    const subtotal = items.reduce((s, i) => s + Number(i.subtotal), 0);
-    const discount = items.reduce((s, i) =>
-        s + (Number(i.unitPrice) - Number(i.effectiveUnitPrice || i.unitPrice)) * Number(i.quantity), 0);
-    const delivery = subtotal === 0 ? 0 : (subtotal >= FREE_DELIVERY_ABOVE ? 0 : DELIVERY_CHARGE);
-    updateSummary(subtotal, discount, delivery);
+    updateSummary(cart);
 }
 
 function changeQty(itemId, delta) {
     const item = cartData.items.find(i => i.id === itemId);
     if (!item) return;
     const newQty = item.quantity + delta;
-    if (newQty < 1) return;
+    const minQty = Number(item.minOrderQty) || 1;
+    if (newQty < minQty) {
+        showToast('Minimum order quantity is ' + minQty + ' KG', 'error');
+        return;
+    }
     if (newQty > Number(item.availableStock)) {
         showToast('Only ' + item.availableStock + ' KG available', 'error');
         return;
@@ -103,23 +102,23 @@ function updateCart(itemId, payload) {
 
 function removeItem(itemId) {
     apiCall('/api/cart/items/' + itemId, { method: 'DELETE' })
-        .then(res => { cartData = res.data; renderCart(cartData); updateCartCount(); showToast('Item removed'); })
+        .then(() => { showToast('Item removed'); return loadCart(); })
         .catch(err => showToast(err.message, 'error'));
 }
 
 function clearCart() {
     if (!confirm('Are you sure you want to clear your cart?')) return;
     apiCall('/api/cart', { method: 'DELETE' })
-        .then(() => { cartData = { items: [] }; renderCart(cartData); updateCartCount(); showToast('Cart cleared'); })
+        .then(() => { showToast('Cart cleared'); loadCart(); })
         .catch(err => showToast(err.message, 'error'));
 }
 
-function updateSummary(subtotal, discount, delivery) {
-    document.getElementById('sum-items').textContent = cartData ? cartData.totalItems : 0;
-    document.getElementById('sum-subtotal').textContent = fmtMoney(subtotal);
-    document.getElementById('sum-discount').textContent = '- ' + fmtMoney(discount);
-    document.getElementById('sum-delivery').textContent = delivery === 0 ? 'FREE' : fmtMoney(delivery);
-    document.getElementById('sum-total').textContent = fmtMoney(subtotal + delivery);
+function updateSummary(cart) {
+    document.getElementById('sum-items').textContent = cart.totalItems || 0;
+    document.getElementById('sum-subtotal').textContent = fmtMoney(cart.subtotal || 0);
+    document.getElementById('sum-discount').textContent = '- ' + fmtMoney(cart.discount || 0);
+    document.getElementById('sum-delivery').textContent = Number(cart.deliveryCharge || 0) > 0 ? fmtMoney(cart.deliveryCharge) : 'FREE';
+    document.getElementById('sum-total').textContent = fmtMoney(cart.grandTotal || 0);
 }
 
 function goCheckout() {

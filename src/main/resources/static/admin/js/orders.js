@@ -51,26 +51,27 @@ async function loadOrders() {
         body.innerHTML = `
         <table class="table table-fm align-middle">
           <thead>
-            <tr><th>Order No.</th><th>Customer</th><th>Items</th><th>Total</th><th>Placed On</th><th>Slot</th><th>Payment</th><th>Status</th><th class="text-end">Action</th></tr>
+            <tr><th>Order No.</th><th>Customer</th><th>Product(s)</th><th>Total</th><th>Placed On</th><th>Slot</th><th>Payment</th><th>Status</th></tr>
           </thead>
           <tbody>
-            ${orders.map(o => `
+            ${orders.map(o => {
+              const productLines = (o.items || []).map(i =>
+                `<div><strong>${escapeHtml(i.productName)}</strong> × ${i.quantity} KG</div>`
+              ).join('');
+              return `
             <tr>
               <td><strong class="small">${escapeHtml(o.orderNumber)}</strong></td>
               <td>
                 <strong class="small">${escapeHtml(o.customerName)}</strong>
                 <div class="text-muted" style="font-size:0.72rem;">${escapeHtml(o.customerPhone || '')}</div>
               </td>
-              <td>${(o.items || []).length}</td>
+              <td style="font-size:0.82rem;">${productLines}</td>
               <td><strong>${fmtMoney(o.grandTotal)}</strong></td>
               <td class="text-muted" style="font-size:0.78rem;">${fmtDate(o.createdAt)}</td>
               <td class="text-muted" style="font-size:0.78rem;">${escapeHtml(o.deliverySlot || '-')}</td>
               <td style="font-size:0.78rem;">${escapeHtml((o.paymentMethod || '').replace(/_/g, ' '))}</td>
-              <td>${adminStatusBadge(o.status)}</td>
-              <td class="text-end">
-                <button class="btn-icon-xs edit" onclick="openOrderModal(${o.id})" title="View / Update"><i class="fa-regular fa-eye"></i></button>
-              </td>
-            </tr>`).join('')}
+              <td style="cursor:pointer;" onclick="openOrderModal(${o.id})" title="View / Update Status">${adminStatusBadge(o.status)}</td>
+            </tr>`}).join('')}
           </tbody>
         </table>`;
     } catch (e) {

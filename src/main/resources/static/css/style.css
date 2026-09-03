@@ -506,6 +506,20 @@ button { cursor: pointer; font-family: var(--font-body); }
     color: rgba(255,255,255,0.75);
     padding: 4rem 0 0;
 }
+.footer-contact-col h5 {
+    margin-bottom: 1.2rem;
+}
+@media (min-width: 992px) {
+    .footer-main .footer-contact-col {
+        text-align: left;
+        padding-left: 2.5rem;
+    }
+}
+@media (max-width: 991.98px) {
+    .footer-main .footer-contact-col {
+        padding-top: 0.5rem;
+    }
+}
 .footer-fm h5 {
     color: #fff;
     font-size: 1rem;

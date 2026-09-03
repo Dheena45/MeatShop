@@ -4,9 +4,6 @@ let selectedSlot = null;
 let selectedPay = 'CASH_ON_DELIVERY';
 let cartData = null;
 
-const DELIVERY_CHARGE = 40;
-const FREE_DELIVERY_ABOVE = 499;
-
 document.addEventListener('DOMContentLoaded', function () {
     if (!Auth.requireLogin()) return;
     loadCart();
@@ -63,15 +60,13 @@ function renderSummary(cart) {
           <span>${fmtMoney(item.subtotal)}</span>
         </div>`).join('');
 
-    const subtotal = items.reduce((s, i) => s + Number(i.subtotal), 0);
-    const discount = items.reduce((s, i) =>
-        s + (Number(i.unitPrice) - Number(i.effectiveUnitPrice || i.unitPrice)) * Number(i.quantity), 0);
-    const delivery = subtotal >= FREE_DELIVERY_ABOVE ? 0 : DELIVERY_CHARGE;
+    const discount = Number(cart.discount || 0);
+    const deliveryCharge = Number(cart.deliveryCharge || 0);
 
-    document.getElementById('co-subtotal').textContent = fmtMoney(subtotal);
+    document.getElementById('co-subtotal').textContent = fmtMoney(cart.subtotal);
     document.getElementById('co-discount').textContent = '- ' + fmtMoney(discount);
-    document.getElementById('co-delivery').textContent = delivery === 0 ? 'FREE' : fmtMoney(delivery);
-    document.getElementById('co-total').textContent = fmtMoney(subtotal + delivery);
+    document.getElementById('co-delivery').textContent = deliveryCharge > 0 ? fmtMoney(deliveryCharge) : 'FREE';
+    document.getElementById('co-total').textContent = fmtMoney(cart.grandTotal);
 }
 
 function selectSlot(el) {
@@ -118,6 +113,10 @@ function fillSavedAddress(idx) {
 }
 
 function placeOrder() {
+    const btn = document.getElementById('place-order-btn');
+    if (btn.disabled || window._placingOrder) return;
+    window._placingOrder = true;
+
     const name = document.getElementById('co-name').value.trim();
     const phone = document.getElementById('co-phone').value.trim();
     const email = document.getElementById('co-email').value.trim();
@@ -129,15 +128,14 @@ function placeOrder() {
     const pincode = document.getElementById('co-pincode').value.trim();
     const notes = document.getElementById('co-notes').value.trim();
 
-    if (name.length < 2) { showToast('Please enter your full name', 'warning'); return; }
-    if (!/^\d{10}$/.test(phone)) { showToast('Please enter a valid 10-digit mobile number', 'warning'); return; }
-    if (!/^\S+@\S+\.\S+$/.test(email)) { showToast('Please enter a valid email', 'warning'); return; }
-    if (!door || !street || !area) { showToast('Please complete the delivery address', 'warning'); return; }
-    if (!city) { showToast('Please enter city', 'warning'); return; }
-    if (!/^\d{6}$/.test(pincode)) { showToast('Please enter a valid 6-digit pincode', 'warning'); return; }
-    if (!selectedSlot) { showToast('Please select a delivery slot', 'warning'); return; }
+    if (name.length < 2) { showToast('Please enter your full name', 'warning'); window._placingOrder = false; return; }
+    if (!/^\d{10}$/.test(phone)) { showToast('Please enter a valid 10-digit mobile number', 'warning'); window._placingOrder = false; return; }
+    if (!/^\S+@\S+\.\S+$/.test(email)) { showToast('Please enter a valid email', 'warning'); window._placingOrder = false; return; }
+    if (!door || !street || !area) { showToast('Please complete the delivery address', 'warning'); window._placingOrder = false; return; }
+    if (!city) { showToast('Please enter city', 'warning'); window._placingOrder = false; return; }
+    if (!/^\d{6}$/.test(pincode)) { showToast('Please enter a valid 6-digit pincode', 'warning'); window._placingOrder = false; return; }
+    if (!selectedSlot) { showToast('Please select a delivery slot', 'warning'); window._placingOrder = false; return; }
 
-    const btn = document.getElementById('place-order-btn');
     btn.disabled = true;
     btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Placing Order...';
 
@@ -174,6 +172,7 @@ function placeOrder() {
         .catch(err => {
             showToast(err.message || 'Order failed', 'error');
             btn.disabled = false;
+            window._placingOrder = false;
             btn.innerHTML = '<i class="fa-solid fa-check me-1"></i>Place Order';
         });
 }

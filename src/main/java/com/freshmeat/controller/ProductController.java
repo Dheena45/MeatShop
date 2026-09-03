@@ -41,10 +41,10 @@ public class ProductController {
         return ResponseEntity.ok(ApiResponse.ok(productService.getProductDetail(id)));
     }
 
-    @GetMapping("/list/best-sellers")
-    public ResponseEntity<ApiResponse<List<ProductDTO>>> getBestSellers() {
-        return ResponseEntity.ok(ApiResponse.ok(productService.getBestSellers()));
-    }
+    // @GetMapping("/list/best-sellers")
+    // public ResponseEntity<ApiResponse<List<ProductDTO>>> getBestSellers() {
+    //     return ResponseEntity.ok(ApiResponse.ok(productService.getBestSellers()));
+    // }
 
     @GetMapping("/list/fresh")
     public ResponseEntity<ApiResponse<List<ProductDTO>>> getFresh() {

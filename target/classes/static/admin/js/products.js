@@ -1,7 +1,6 @@
 /* FreshMeat — Admin Products controller */
 
 let editProductId = null;
-let productImageUrl = null;
 const PRODUCT_MODAL = new bootstrap.Modal(document.getElementById('productModal'));
 
 document.addEventListener('DOMContentLoaded', function () {
@@ -23,17 +22,14 @@ document.addEventListener('DOMContentLoaded', function () {
     loadProducts();
     loadCategories();
 
-    document.getElementById('p-img-input').addEventListener('change', async (e) => {
+    document.getElementById('p-img-input').addEventListener('change', (e) => {
         const file = e.target.files[0];
         if (!file) return;
-        try {
-            const url = await uploadFile(file);
-            productImageUrl = url;
-            document.getElementById('p-img-preview').src = url;
-            showToast('Image uploaded');
-        } catch (err) {
-            showToast(err.message || 'Upload failed', 'error');
-        }
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+            document.getElementById('p-img-preview').src = ev.target.result;
+        };
+        reader.readAsDataURL(file);
     });
 
     document.getElementById('save-product-btn').addEventListener('click', saveProduct);
@@ -107,7 +103,6 @@ async function openProductModal(id) {
     document.getElementById('p-available').checked = true;
     document.getElementById('p-fresh').checked = true;
     document.getElementById('p-category').value = '';
-    productImageUrl = null;
     document.getElementById('p-img-preview').src = 'https://placehold.co/600x600/2d2d2d/f5f0e8?text=IMG';
     document.getElementById('p-img-input').value = '';
 
@@ -126,7 +121,6 @@ async function openProductModal(id) {
             document.getElementById('p-category').value = p.categoryId || '';
             document.getElementById('p-available').checked = p.available !== false;
             document.getElementById('p-fresh').checked = p.freshToday !== false;
-            productImageUrl = p.imageUrl;
             document.getElementById('p-img-preview').src = p.imageUrl || 'https://placehold.co/600x600/2d2d2d/f5f0e8?text=IMG';
         } catch (e) {
             showToast(e.message, 'error');
@@ -137,43 +131,57 @@ async function openProductModal(id) {
 }
 
 async function saveProduct() {
+    const name = document.getElementById('p-name').value.trim();
+    const pricePerKg = document.getElementById('p-price').value;
     const categoryId = document.getElementById('p-category').value;
-    const payload = {
-        name: document.getElementById('p-name').value.trim(),
-        shortDescription: document.getElementById('p-short').value.trim() || null,
-        description: document.getElementById('p-desc').value.trim() || null,
-        pricePerKg: document.getElementById('p-price').value,
-        discountPercent: document.getElementById('p-discount').value || 0,
-        stockQuantity: document.getElementById('p-stock').value,
-        minOrderQty: document.getElementById('p-minqty').value || 1,
-        imageUrl: productImageUrl,
-        available: document.getElementById('p-available').checked,
-        freshToday: document.getElementById('p-fresh').checked,
-        categoryId: categoryId ? Number(categoryId) : null,
-        cuttingOptions: document.getElementById('p-cuts').value.split(',').map(s => s.trim().toUpperCase()).filter(Boolean)
-    };
+    const stockQuantity = document.getElementById('p-stock').value;
 
-    if (!payload.name) { showToast('Product name is required', 'warning'); return; }
-    if (!(Number(payload.pricePerKg) > 0)) { showToast('Valid price required', 'warning'); return; }
+    if (!name) { showToast('Product name is required', 'warning'); return; }
+    if (!(Number(pricePerKg) > 0)) { showToast('Valid price required', 'warning'); return; }
     if (!categoryId) { showToast('Please select a category', 'warning'); return; }
-    if (payload.stockQuantity === '' || Number(payload.stockQuantity) < 0) { showToast('Valid stock required', 'warning'); return; }
+    if (stockQuantity === '' || Number(stockQuantity) < 0) { showToast('Valid stock required', 'warning'); return; }
+
+    const fd = new FormData();
+    fd.append('name', name);
+    fd.append('shortDescription', document.getElementById('p-short').value.trim() || '');
+    fd.append('description', document.getElementById('p-desc').value.trim() || '');
+    fd.append('pricePerKg', pricePerKg);
+    fd.append('discountPercent', document.getElementById('p-discount').value || 0);
+    fd.append('stockQuantity', stockQuantity);
+    fd.append('minOrderQty', document.getElementById('p-minqty').value || 1);
+    fd.append('available', document.getElementById('p-available').checked);
+    fd.append('freshToday', document.getElementById('p-fresh').checked);
+    fd.append('categoryId', categoryId);
+    fd.append('cuttingOptions', document.getElementById('p-cuts').value);
+
+    const fileInput = document.getElementById('p-img-input');
+    if (fileInput && fileInput.files.length > 0) {
+        fd.append('image', fileInput.files[0]);
+    }
 
     const btn = document.getElementById('save-product-btn');
     btn.disabled = true;
     btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Saving...';
 
     try {
-        if (editProductId) {
-            await apiCall('/api/admin/products/' + editProductId, { method: 'PUT', body: payload });
-            showToast('Product updated');
-        } else {
-            await apiCall('/api/admin/products', { method: 'POST', body: payload });
-            showToast('Product added');
+        const token = Auth.getToken();
+        const headers = {};
+        if (token) headers['Authorization'] = 'Bearer ' + token;
+
+        const method = editProductId ? 'PUT' : 'POST';
+        const url = API_BASE + (editProductId ? '/api/admin/products/' + editProductId : '/api/admin/products');
+
+        const response = await fetch(url, { method, headers, body: fd });
+        const data = await response.json().catch(() => null);
+
+        if (!response.ok) {
+            throw { message: (data && (data.message || data.error)) || 'Request failed' };
         }
+        showToast(editProductId ? 'Product updated' : 'Product added');
         PRODUCT_MODAL.hide();
         loadProducts();
     } catch (e) {
-        showToast(e.message, 'error');
+        showToast(e.message || 'Save failed', 'error');
     } finally {
         btn.disabled = false;
         btn.innerHTML = 'Save Product';

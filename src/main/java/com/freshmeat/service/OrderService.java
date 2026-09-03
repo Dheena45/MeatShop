@@ -21,7 +21,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
-import java.time.LocalDate;
+import java.security.SecureRandom;
+import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
@@ -100,9 +101,8 @@ public class OrderService {
         order.setDeliveryState(request.getDeliveryState());
         order.setDeliveryPincode(request.getDeliveryPincode());
         order.setNotes(request.getNotes());
+        order.setOrderNumber(generateOrderNumber());
         order = orderRepository.save(order);
-
-        order.setOrderNumber(generateOrderNumber(order.getId()));
 
         for (CartItem item : selectedItems) {
             Product product = item.getProduct();
@@ -129,8 +129,6 @@ public class OrderService {
             method = PaymentMethod.CASH_ON_DELIVERY;
         }
         paymentService.createPayment(order, method, order.getGrandTotal());
-
-        orderRepository.save(order);
 
         for (CartItem item : selectedItems) {
             cartItemRepository.delete(item);
@@ -233,13 +231,14 @@ public class OrderService {
             BigDecimal originalPrice = productRepository.findById(item.getProduct().getId())
                     .orElseThrow().getPricePerKg();
             BigDecimal lineOriginal = originalPrice.multiply(BigDecimal.valueOf(item.getQuantity()));
-            subtotal = subtotal.add(item.getSubtotal());
+            subtotal = subtotal.add(lineOriginal);
             discount = discount.add(lineOriginal.subtract(item.getSubtotal()));
         }
 
-        BigDecimal deliveryCharge = deliveryChargeFor(subtotal);
-        BigDecimal tax = subtotal.multiply(TAX_RATE).setScale(2, RoundingMode.HALF_UP);
-        BigDecimal grandTotal = subtotal.add(deliveryCharge).add(tax);
+        BigDecimal discountedSubtotal = subtotal.subtract(discount);
+        BigDecimal deliveryCharge = deliveryChargeFor(discountedSubtotal);
+        BigDecimal tax = discountedSubtotal.multiply(TAX_RATE).setScale(2, RoundingMode.HALF_UP);
+        BigDecimal grandTotal = discountedSubtotal.add(deliveryCharge).add(tax);
 
         BigdecimalHelper helper = new BigdecimalHelper();
         helper.subtotal = subtotal;
@@ -257,20 +256,23 @@ public class OrderService {
         return DELIVERY_CHARGE;
     }
 
-    private String generateOrderNumber(Long orderId) {
-        LocalDate today = LocalDate.now();
+    private static final SecureRandom RANDOM = new SecureRandom();
+
+    private String generateOrderNumber() {
         DateTimeFormatter dateFormatter = DateTimeFormatter.ofPattern("yyyyMMdd");
-        String datePart = today.format(dateFormatter);
-        String seqPart = String.format("%04d", orderId % 10000);
-        String candidate = "FM-" + datePart + "-" + seqPart;
+        String datePart = LocalDateTime.now().format(dateFormatter);
 
         int attempt = 0;
-        while (orderRepository.existsByOrderNumber(candidate)) {
-            attempt++;
-            seqPart = String.format("%04d", (orderId + attempt * 7) % 10000);
-            candidate = "FM-" + datePart + "-" + seqPart;
+        while (true) {
+            int randomSeq = 1000 + RANDOM.nextInt(9000);
+            String candidate = "FM-" + datePart + "-" + randomSeq;
+            if (!orderRepository.existsByOrderNumber(candidate)) {
+                return candidate;
+            }
+            if (++attempt > 20) {
+                throw new IllegalStateException("Could not generate a unique order number");
+            }
         }
-        return candidate;
     }
 
     public OrderDTO toDTO(Order order) {

@@ -1,3 +1,4 @@
+
 /* FreshMeat — Auth page controller (login + register) */
 
 document.addEventListener('DOMContentLoaded', function () {

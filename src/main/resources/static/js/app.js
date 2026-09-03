@@ -222,15 +222,9 @@ function renderSharedHeader(active) {
         <div class="collapse navbar-collapse" id="fmNavbar">
           <ul class="navbar-nav mx-auto">
             ${navLink('/', 'Home', 'home')}
-            ${navLink('/shop.html', 'Shop', 'shop')}
-            ${navLink('/shop.html#categories', 'Categories', 'categories')}
-            ${navLink('/shop.html#offers', 'Offers', 'offers')}
-            ${navLink('/shop.html#about', 'About', 'about')}
-            ${navLink('/shop.html#contact', 'Contact', 'contact')}
+            
           </ul>
-          <form class="d-flex align-items-center gap-2 mt-2 mt-lg-0" onsubmit="event.preventDefault(); gotoSearch()">
-            <input type="search" class="nav-search-input" id="nav-search" placeholder="Search chicken, mutton..." />
-          </form>
+          
           <div class="d-flex align-items-center gap-1 mt-2 mt-lg-0">
             <a class="nav-icon-btn" href="/cart.html" title="Cart">
               <i class="fa-solid fa-basket-shopping"></i>
@@ -267,8 +261,8 @@ function renderSharedFooter() {
     footer.innerHTML = `
       <footer class="footer-fm">
         <div class="container">
-          <div class="row g-4">
-            <div class="col-lg-4 col-md-6">
+          <div class="row g-4 align-items-start footer-main">
+            <div class="col-lg-7 col-md-12">
               <h5 class="fw-bold" style="font-family:var(--font-head);font-size:1.4rem;">Fresh<span style="color:var(--gold)">Meat</span></h5>
               <p class="mt-2" style="font-size:0.88rem;">Fresh Cuts. Honest Prices. Delivered Fast. We bring premium quality meat, hygienically processed and delivered fresh to your doorstep.</p>
               <div class="social-icons mt-3">
@@ -278,26 +272,7 @@ function renderSharedFooter() {
                 <a href="#"><i class="fa-brands fa-youtube"></i></a>
               </div>
             </div>
-            <div class="col-lg-2 col-md-6">
-              <h5>Quick Links</h5>
-              <ul class="list-unstyled f-links">
-                <li><a href="/">Home</a></li>
-                <li><a href="/shop.html">Shop</a></li>
-                <li><a href="/cart.html">Cart</a></li>
-                <li><a href="/orders.html">My Orders</a></li>
-                <li><a href="/profile.html">My Account</a></li>
-              </ul>
-            </div>
-            <div class="col-lg-2 col-md-6">
-              <h5>Categories</h5>
-              <ul class="list-unstyled f-links" id="footer-cats">
-                <li><a href="/shop.html">Chicken</a></li>
-                <li><a href="/shop.html">Mutton</a></li>
-                <li><a href="/shop.html">Fish</a></li>
-                <li><a href="/shop.html">Eggs</a></li>
-              </ul>
-            </div>
-            <div class="col-lg-4 col-md-6">
+            <div class="col-lg-5 col-md-12 footer-contact-col">
               <h5>Contact</h5>
               <ul class="list-unstyled f-contact">
                 <li><i class="fa-solid fa-location-dot"></i><span>12, Meat Market Road, Chennai, Tamil Nadu 600001</span></li>
@@ -316,17 +291,6 @@ function renderSharedFooter() {
           </div>
         </div>
       </footer>`;
-
-    fetch('/api/categories')
-        .then(r => r.json())
-        .then(res => {
-            if (res && res.data && res.data.length) {
-                const el = document.getElementById('footer-cats');
-                el.innerHTML = res.data.slice(0, 4).map(c =>
-                    `<li><a href="/shop.html?category=${c.id}">${escapeHtml(c.name)}</a></li>`).join('');
-            }
-        })
-        .catch(() => {});
 }
 
 document.addEventListener('DOMContentLoaded', function () {
@@ -350,7 +314,7 @@ function productCardHtml(p) {
     const disc = Number(p.discountPercent || 0);
     const outOfStock = !p.available || Number(p.stockQuantity) <= 0;
     const lowStock = !outOfStock && Number(p.stockQuantity) <= 8;
-    const img = p.imageUrl || 'https://placehold.co/600x600/2d2d2d/f5f0e8?text=FreshMeat';
+    const img = p.imageUrl || '/images/default-meat.jpg';
 
     let stockHtml;
     if (outOfStock) stockHtml = '<span class="out-stock"><i class="fa-solid fa-circle"></i> Out of Stock</span>';

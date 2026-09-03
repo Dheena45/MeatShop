@@ -164,6 +164,12 @@ public class ProductService {
         return toDTO(product);
     }
 
+    public ProductDTO getAdminProduct(Long id) {
+        Product product = productRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Product not found"));
+        return toDTO(product);
+    }
+
     @Transactional
     public void deleteProduct(Long id) {
         Product product = productRepository.findById(id)

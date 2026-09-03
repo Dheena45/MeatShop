@@ -91,3 +91,4 @@ com\freshmeat\dto\AuthResponse.class
 com\freshmeat\dto\DeliveryAddressDTO.class
 com\freshmeat\enums\PaymentMethod.class
 com\freshmeat\dto\ReviewDTO.class
+com\freshmeat\service\FileStorageService.class

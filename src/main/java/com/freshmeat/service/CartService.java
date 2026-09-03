@@ -41,6 +41,9 @@ public class CartService {
     @Autowired
     private ProductService productService;
 
+    private static final BigDecimal DELIVERY_CHARGE = new BigDecimal("40");
+    private static final BigDecimal FREE_DELIVERY_THRESHOLD = new BigDecimal("499");
+
     private Cart getOrCreateCart(User user) {
         return cartRepository.findByUser(user).orElseGet(() -> {
             Cart cart = new Cart();
@@ -60,11 +63,23 @@ public class CartService {
         dto.setCartId(cart.getId());
         dto.setItems(items);
         dto.setTotalItems(items.stream().mapToInt(CartItemDTO::getQuantity).sum());
-        dto.setSubtotal(items.stream().map(CartItemDTO::getSubtotal).reduce(BigDecimal.ZERO, BigDecimal::add));
-        BigDecimal discount = items.stream()
-                .map(i -> i.getUnitPrice().subtract(i.getEffectiveUnitPrice()).multiply(BigDecimal.valueOf(i.getQuantity())))
+
+        BigDecimal originalSubtotal = items.stream()
+                .map(i -> i.getUnitPrice().multiply(BigDecimal.valueOf(i.getQuantity())))
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal discount = items.stream()
+                .map(i -> i.getUnitPrice().subtract(i.getEffectiveUnitPrice())
+                        .multiply(BigDecimal.valueOf(i.getQuantity())))
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+        BigDecimal discountedSubtotal = originalSubtotal.subtract(discount);
+        BigDecimal deliveryCharge = deliveryChargeFor(discountedSubtotal);
+        BigDecimal grandTotal = originalSubtotal.subtract(discount).add(deliveryCharge);
+
+        dto.setSubtotal(originalSubtotal);
         dto.setDiscount(discount);
+        dto.setDeliveryCharge(deliveryCharge);
+        dto.setGrandTotal(grandTotal);
         return dto;
     }
 
@@ -187,6 +202,13 @@ public class CartService {
         }
     }
 
+    private BigDecimal deliveryChargeFor(BigDecimal discountedSubtotal) {
+        if (discountedSubtotal.compareTo(FREE_DELIVERY_THRESHOLD) >= 0) {
+            return BigDecimal.ZERO;
+        }
+        return DELIVERY_CHARGE;
+    }
+
     private CartItemDTO toDTO(CartItem item) {
         Product product = item.getProduct();
         CartItemDTO dto = new CartItemDTO();
@@ -197,10 +219,11 @@ public class CartService {
         dto.setCategoryName(product.getCategory() != null ? product.getCategory().getName() : "");
         dto.setQuantity(item.getQuantity());
         dto.setCuttingOption(item.getCuttingOption());
-        dto.setUnitPrice(item.getUnitPrice());
+        dto.setUnitPrice(product.getPricePerKg());
         dto.setEffectiveUnitPrice(productService.effectivePrice(product));
-        dto.setSubtotal(item.getSubtotal());
+        dto.setSubtotal(productService.effectivePrice(product).multiply(BigDecimal.valueOf(item.getQuantity())));
         dto.setAvailableStock(product.getStockQuantity());
+        dto.setMinOrderQty(product.getMinOrderQty());
         dto.setAvailable(product.getAvailable());
         return dto;
     }
