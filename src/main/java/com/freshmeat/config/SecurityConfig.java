@@ -4,6 +4,7 @@ import com.freshmeat.security.JwtAuthFilter;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
@@ -43,12 +44,30 @@ public class SecurityConfig {
                         .requestMatchers("/api/offers/public**").permitAll()
                         .requestMatchers("/api/files/**").permitAll()
                         .requestMatchers("/uploads/**").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/reviews").permitAll()
+                        .requestMatchers("/api/reviews/recent").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/contact-settings").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/site-settings").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/contact/messages").authenticated()
                         .requestMatchers("/", "/index.html", "/login.html", "/register.html",
                                 "/shop.html", "/product-details.html", "/css/**", "/js/**",
-                                "/images/**", "/admin/**").permitAll()
+                                "/images/**", "/admin/**", "/delivery/**").permitAll()
+                        // Admin tree. Every /api/admin/** endpoint — including all
+                        // delivery management — is ADMIN only.
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
-                        .requestMatchers("/api/cart/**", "/api/orders/**", "/api/reviews/**",
-                                "/api/profile/**", "/api/addresses/**").authenticated()
+                        // Delivery staff: their own API only. A DELIVERY_BOY token
+                        // cannot reach products, categories, customers, cart,
+                        // orders, reviews, profiles, settings or any admin route.
+                        .requestMatchers("/api/delivery/**").hasRole("DELIVERY_BOY")
+                        // Customer + admin surface. A delivery boy is intentionally
+                        // excluded from all of it.
+                        .requestMatchers("/api/cart/**", "/api/orders/**", "/api/addresses/**")
+                        .hasAnyRole("CUSTOMER", "ADMIN")
+                        .requestMatchers("/api/profile/**").hasAnyRole("CUSTOMER", "ADMIN")
+                        .requestMatchers("/api/reviews/**").hasAnyRole("CUSTOMER", "ADMIN")
+                        // Static HTML shells stay public exactly as before; the
+                        // page scripts do the "please log in" redirect while the
+                        // APIs above stay protected.
                         .anyRequest().permitAll()
                 )
                 .exceptionHandling(ex -> ex
@@ -57,6 +76,14 @@ public class SecurityConfig {
                             response.setContentType("application/json");
                             response.getWriter().write(
                                     "{\"success\":false,\"message\":\"Authentication required\",\"status\":401}");
+                        })
+                        .accessDeniedHandler((request, response, accessDeniedException) -> {
+                            // Always answer with a readable message so the UI can
+                            // show a toast instead of a generic failure.
+                            response.setStatus(403);
+                            response.setContentType("application/json");
+                            response.getWriter().write(
+                                    "{\"success\":false,\"message\":\"You do not have permission to perform this action\",\"status\":403}");
                         })
                 )
                 .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);

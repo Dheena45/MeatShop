@@ -2,14 +2,15 @@ package com.freshmeat.service;
 
 import com.freshmeat.dto.ProductDTO;
 import com.freshmeat.dto.ProductDetailDTO;
-import com.freshmeat.dto.ReviewDTO;
 import com.freshmeat.entity.Category;
 import com.freshmeat.entity.Product;
-import com.freshmeat.entity.Review;
+import com.freshmeat.exception.ConflictException;
 import com.freshmeat.exception.ResourceNotFoundException;
+import com.freshmeat.repository.CartItemRepository;
 import com.freshmeat.repository.CategoryRepository;
+import com.freshmeat.repository.InventoryRepository;
+import com.freshmeat.repository.OrderItemRepository;
 import com.freshmeat.repository.ProductRepository;
-import com.freshmeat.repository.ReviewRepository;
 import jakarta.persistence.criteria.Predicate;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
@@ -36,16 +37,43 @@ public class ProductService {
     private CategoryRepository categoryRepository;
 
     @Autowired
-    private ReviewRepository reviewRepository;
+    private OrderItemRepository orderItemRepository;
+
+    @Autowired
+    private CartItemRepository cartItemRepository;
+
+    @Autowired
+    private InventoryRepository inventoryRepository;
+
+    @Autowired
+    private FileStorageService fileStorageService;
 
     public Page<ProductDTO> searchProducts(String search, Long categoryId,
                                            BigDecimal minPrice, BigDecimal maxPrice,
                                            Double minRating, Boolean inStock,
                                            String sort, int page, int size) {
+        return searchInternal(true, search, categoryId, minPrice, maxPrice,
+                minRating, inStock, sort, page, size);
+    }
+
+    public Page<ProductDTO> searchAdminProducts(String search, Long categoryId,
+                                                BigDecimal minPrice, BigDecimal maxPrice,
+                                                Double minRating, Boolean inStock,
+                                                String sort, int page, int size) {
+        return searchInternal(false, search, categoryId, minPrice, maxPrice,
+                minRating, inStock, sort, page, size);
+    }
+
+    private Page<ProductDTO> searchInternal(boolean onlyAvailable, String search, Long categoryId,
+                                            BigDecimal minPrice, BigDecimal maxPrice,
+                                            Double minRating, Boolean inStock,
+                                            String sort, int page, int size) {
 
         Specification<Product> spec = (root, query, cb) -> {
             List<Predicate> predicates = new ArrayList<>();
-            predicates.add(cb.equal(root.get("available"), true));
+            if (onlyAvailable) {
+                predicates.add(cb.equal(root.get("available"), true));
+            }
 
             if (search != null && !search.isBlank()) {
                 String pattern = "%" + search.toLowerCase() + "%";
@@ -106,6 +134,7 @@ public class ProductService {
         dto.setEffectivePrice(effectivePrice(product));
         dto.setStockQuantity(product.getStockQuantity());
         dto.setMinOrderQty(product.getMinOrderQty());
+        dto.setUnit(product.getUnit());
         dto.setImageUrl(product.getImageUrl());
         dto.setAvailable(product.getAvailable());
         dto.setFreshToday(product.getFreshToday());
@@ -114,10 +143,6 @@ public class ProductService {
         dto.setCategoryId(product.getCategory().getId());
         dto.setCategoryName(product.getCategory().getName());
         dto.setCuttingOptions(product.getCuttingOptions());
-
-        List<ReviewDTO> reviewDTOs = reviewRepository.findByProductIdOrderByCreatedAtDesc(id)
-                .stream().map(this::toReviewDTO).collect(Collectors.toList());
-        dto.setReviews(reviewDTOs);
 
         return dto;
     }
@@ -174,8 +199,22 @@ public class ProductService {
     public void deleteProduct(Long id) {
         Product product = productRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Product not found"));
-        product.setAvailable(false);
-        productRepository.save(product);
+
+        // Preserve historical order data: products referenced by order items
+        // must not be physically removed, otherwise past orders break.
+        if (orderItemRepository.countByProductId(id) > 0) {
+            throw new ConflictException(
+                    "This product cannot be permanently deleted because it is used in existing orders. You can deactivate it instead.");
+        }
+
+        // Clean up product-specific references before the hard delete.
+        cartItemRepository.deleteByProductId(id);
+        inventoryRepository.deleteByProductId(id);
+        fileStorageService.deleteUploadedFile(product.getImageUrl());
+
+        // JPA removes the element collection (product_cutting_options).
+        productRepository.delete(product);
+        productRepository.flush();
     }
 
     @Transactional
@@ -210,6 +249,7 @@ public class ProductService {
         if (dto.getDiscountPercent() != null) product.setDiscountPercent(dto.getDiscountPercent());
         if (dto.getStockQuantity() != null) product.setStockQuantity(dto.getStockQuantity());
         if (dto.getMinOrderQty() != null) product.setMinOrderQty(dto.getMinOrderQty());
+        if (dto.getUnit() != null && !dto.getUnit().isBlank()) product.setUnit(dto.getUnit().toUpperCase());
         if (dto.getImageUrl() != null) product.setImageUrl(dto.getImageUrl());
         if (dto.getAvailable() != null) product.setAvailable(dto.getAvailable());
         if (dto.getFreshToday() != null) product.setFreshToday(dto.getFreshToday());
@@ -230,10 +270,12 @@ public class ProductService {
         dto.setDiscountPercent(product.getDiscountPercent());
         dto.setStockQuantity(product.getStockQuantity());
         dto.setMinOrderQty(product.getMinOrderQty());
+        dto.setUnit(product.getUnit());
         dto.setImageUrl(product.getImageUrl());
         dto.setAvailable(product.getAvailable());
         dto.setFreshToday(product.getFreshToday());
         dto.setCategoryId(product.getCategory() != null ? product.getCategory().getId() : null);
+        dto.setCategoryName(product.getCategory() != null ? product.getCategory().getName() : null);
         dto.setCuttingOptions(product.getCuttingOptions());
         dto.setAvgRating(product.getAvgRating());
         dto.setReviewCount(product.getReviewCount());
@@ -248,24 +290,5 @@ public class ProductService {
             return price.subtract(discountAmount).setScale(2, RoundingMode.HALF_UP);
         }
         return price;
-    }
-
-    private ReviewDTO toReviewDTO(Review review) {
-        ReviewDTO dto = new ReviewDTO();
-        dto.setId(review.getId());
-        dto.setUserId(review.getUser().getId());
-        dto.setProductId(review.getProduct().getId());
-        dto.setUserEmail(maskEmail(review.getUser().getEmail()));
-        dto.setRating(review.getRating());
-        dto.setComment(review.getComment());
-        dto.setCreatedAt(review.getCreatedAt() != null ? review.getCreatedAt().toString() : null);
-        return dto;
-    }
-
-    private String maskEmail(String email) {
-        if (email == null) return "";
-        int at = email.indexOf('@');
-        if (at <= 1) return email;
-        return email.substring(0, 2) + "***" + email.substring(at);
     }
 }

@@ -2,6 +2,7 @@ package com.freshmeat.controller;
 
 import com.freshmeat.dto.ReviewDTO;
 import com.freshmeat.exception.ApiResponse;
+import com.freshmeat.service.AuthService;
 import com.freshmeat.service.ReviewService;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -18,15 +19,23 @@ public class ReviewController {
     @Autowired
     private ReviewService reviewService;
 
+    @Autowired
+    private AuthService authService;
+
     @PostMapping
     public ResponseEntity<ApiResponse<ReviewDTO>> addReview(@Valid @RequestBody ReviewDTO request) {
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(ApiResponse.ok("Review submitted", reviewService.addReview(request)));
     }
 
-    @GetMapping("/product/{productId}")
-    public ResponseEntity<ApiResponse<List<ReviewDTO>>> getProductReviews(@PathVariable Long productId) {
-        return ResponseEntity.ok(ApiResponse.ok(reviewService.getProductReviews(productId)));
+    @GetMapping
+    public ResponseEntity<ApiResponse<List<ReviewDTO>>> getPublicReviews() {
+        return ResponseEntity.ok(ApiResponse.ok(reviewService.getPublicReviews()));
+    }
+
+    @GetMapping("/my-reviews")
+    public ResponseEntity<ApiResponse<List<ReviewDTO>>> getMyReviews() {
+        return ResponseEntity.ok(ApiResponse.ok(reviewService.getMyReviews(authService.getCurrentUser().getId())));
     }
 
     @GetMapping("/recent")

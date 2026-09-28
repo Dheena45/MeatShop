@@ -5,6 +5,11 @@ document.addEventListener('DOMContentLoaded', function () {
     loadProfile();
     setupTabs();
 
+    const phoneInput = document.getElementById('pf-phone');
+    if (phoneInput) phoneInput.addEventListener('input', function () {
+        this.value = this.value.replace(/\D+/g, '').slice(0, 10);
+    });
+
     const logoutBtn = document.getElementById('profile-logout');
     if (logoutBtn) logoutBtn.addEventListener('click', e => { e.preventDefault(); Auth.clear(); window.location.href = '/'; });
 });
@@ -21,6 +26,7 @@ function setupTabs() {
             if (pane) pane.classList.remove('d-none');
             if (tab === 'orders') loadProfileOrders();
             if (tab === 'addresses') loadAddresses();
+            if (tab === 'myorders') loadOrdersInto('profile-myorders', 'myorders-loading');
         });
     });
 }
@@ -48,7 +54,7 @@ async function saveProfile() {
     const name = document.getElementById('pf-name').value.trim();
     const phone = document.getElementById('pf-phone').value.trim();
     if (name.length < 2) { showToast('Enter a valid name', 'warning'); return; }
-    if (!/^\d{10}$/.test(phone)) { showToast('Phone must be 10 digits', 'warning'); return; }
+    if (!/^[6-9]\d{9}$/.test(phone)) { showToast('Enter a valid 10-digit mobile number starting with 6, 7, 8, or 9.', 'warning'); return; }
 
     try {
         const res = await apiCall('/api/profile', { method: 'PUT', body: { name, phone } });
@@ -153,7 +159,7 @@ async function loadProfileOrders() {
                     <a href="/order-tracking.html?id=${o.id}" class="fw-bold small">${escapeHtml(o.orderNumber)}</a>
                     <div class="text-muted small">${fmtDate(o.createdAt)} • ${fmtMoney(o.grandTotal)}</div>
                 </div>
-                <span class="status-badge status-${o.status}">${o.status.replace(/_/g, ' ')}</span>
+                <span class="status-badge status-${customerOrderStatusClass(o.status)}">${escapeHtml(customerOrderStatusLabel(o.status))}</span>
             </div>`).join('');
     } catch (e) {
         container.innerHTML = `<p class="text-muted small">${escapeHtml(e.message)}</p>`;

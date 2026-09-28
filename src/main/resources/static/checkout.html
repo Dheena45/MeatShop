@@ -82,23 +82,24 @@
                     <div class="checkout-step">
                         <h5><span class="step-num">3</span> Delivery Slot</h5>
                         <p class="text-muted small mb-3">Pick a delivery window for today.</p>
-                        <div class="row g-2" id="delivery-slots">
-                            <div class="col-6 col-md-4"><div class="slot-option" data-slot="8 AM - 10 AM">8 AM – 10 AM</div></div>
-                            <div class="col-6 col-md-4"><div class="slot-option" data-slot="10 AM - 12 PM">10 AM – 12 PM</div></div>
-                            <div class="col-6 col-md-4"><div class="slot-option" data-slot="12 PM - 2 PM">12 PM – 2 PM</div></div>
-                            <div class="col-6 col-md-4"><div class="slot-option" data-slot="4 PM - 6 PM">4 PM – 6 PM</div></div>
-                            <div class="col-6 col-md-4"><div class="slot-option" data-slot="6 PM - 8 PM">6 PM – 8 PM</div></div>
-                        </div>
+                        <div class="row g-2" id="delivery-slots"></div>
                     </div>
 
                     <!-- STEP 4 -->
                     <div class="checkout-step">
                         <h5><span class="step-num">4</span> Payment Method</h5>
-                        <div class="pay-option selected" data-pay="CASH_ON_DELIVERY">
+                        <div class="pay-option selected" id="co-pay-cod" data-pay="CASH_ON_DELIVERY">
                             <i class="fa-solid fa-hand-holding-dollar fs-4" style="color:var(--success)"></i>
                             <div>
                                 <strong>Cash on Delivery</strong>
-                                <div class="text-muted small">Pay in cash when your order arrives. UPI/online payment coming soon.</div>
+                                <div class="text-muted small">Pay in cash when your order arrives.</div>
+                            </div>
+                        </div>
+                        <div class="pay-option" id="co-pay-online" data-pay="ONLINE">
+                            <i class="fa-solid fa-mobile-screen-button fs-4" style="color:var(--primary)"></i>
+                            <div>
+                                <strong>UPI / Online Payment</strong>
+                                <div class="text-muted small">Pay securely using UPI before delivery.</div>
                             </div>
                         </div>
                     </div>
@@ -120,7 +121,7 @@
                         <div class="summary-line muted"><span>Delivery Charge</span><span id="co-delivery">₹0.00</span></div>
                         <div class="summary-divider"></div>
                         <div class="summary-total"><span>Grand Total</span><span id="co-total">₹0.00</span></div>
-                        <small class="text-muted d-block mt-1">Cash on Delivery</small>
+                        <small class="text-muted d-block mt-1"><i class="fa-solid fa-hand-holding-dollar me-1" id="co-pay-note-icon"></i><span id="co-pay-note-text">Cash on Delivery</span></small>
                         <button class="btn btn-fm w-100 btn-fm-lg mt-3" id="place-order-btn" onclick="placeOrder()">
                             <i class="fa-solid fa-check me-1"></i>Place Order</button>
                     </div>

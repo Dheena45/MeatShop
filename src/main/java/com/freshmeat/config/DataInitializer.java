@@ -4,6 +4,8 @@ import com.freshmeat.entity.*;
 import com.freshmeat.enums.CuttingOption;
 import com.freshmeat.enums.Role;
 import com.freshmeat.repository.*;
+import com.freshmeat.service.ContactSettingsService;
+import com.freshmeat.service.SiteSettingsService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.CommandLineRunner;
@@ -32,14 +34,23 @@ public class DataInitializer implements CommandLineRunner {
     private InventoryRepository inventoryRepository;
 
     @Autowired
+    private ContactSettingsRepository contactSettingsRepository;
+
+    @Autowired
+    private SiteSettingsRepository siteSettingsRepository;
+
+    @Autowired
     private PasswordEncoder passwordEncoder;
 
     @Override
     @Transactional
     public void run(String... args) {
         initAdmin();
+        initDeliveryBoy();
         initCategories();
         initSampleProducts();
+        initContactSettings();
+        initSiteSettings();
     }
 
     private void initAdmin() {
@@ -53,6 +64,25 @@ public class DataInitializer implements CommandLineRunner {
             admin.setEnabled(true);
             userRepository.save(admin);
             log.info("Default admin created: admin@freshmeat.com / admin123");
+        }
+    }
+
+    /**
+     * One sample delivery boy so the assign -> start -> deliver flow can be tried
+     * immediately. He is a normal users row with role DELIVERY_BOY and a BCrypt
+     * hashed password, and he can only ever reach /api/delivery/**.
+     */
+    private void initDeliveryBoy() {
+        if (!userRepository.existsByEmail("ravi@freshmeat.com")) {
+            User boy = new User();
+            boy.setName("Ravi Kumar");
+            boy.setEmail("ravi@freshmeat.com");
+            boy.setPhone("9812345678");
+            boy.setPassword(passwordEncoder.encode("delivery123"));
+            boy.setRole(Role.DELIVERY_BOY);
+            boy.setEnabled(true);
+            userRepository.save(boy);
+            log.info("Default delivery boy created: ravi@freshmeat.com / delivery123");
         }
     }
 
@@ -180,6 +210,18 @@ public class DataInitializer implements CommandLineRunner {
                 Arrays.asList(CuttingOption.WHOLE.name()), true, true, "chicken-wings.jpg");
 
         log.info("Sample products created: " + productRepository.count());
+    }
+
+    private void initContactSettings() {
+        if (contactSettingsRepository.count() > 0) return;
+        contactSettingsRepository.save(ContactSettingsService.createDefault());
+        log.info("Default contact settings created");
+    }
+
+    private void initSiteSettings() {
+        if (siteSettingsRepository.count() > 0) return;
+        siteSettingsRepository.save(SiteSettingsService.createDefault());
+        log.info("Default site settings created");
     }
 
     private void createProduct(String name, String shortDesc, String description,

@@ -33,6 +33,8 @@ public class ProductDTO {
     @Min(value = 1, message = "Min order quantity must be at least 1")
     private Integer minOrderQty = 1;
 
+    private String unit = "KG";
+
     private String imageUrl;
 
     private Boolean available = true;
@@ -40,6 +42,8 @@ public class ProductDTO {
     private Boolean freshToday = true;
 
     private Long categoryId;
+
+    private String categoryName;
 
     private List<String> cuttingOptions;
 

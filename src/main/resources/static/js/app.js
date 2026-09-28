@@ -15,6 +15,10 @@ const Auth = {
         const u = this.getUser();
         return u && u.role === 'ADMIN';
     },
+    isDeliveryBoy() {
+        const u = this.getUser();
+        return u && u.role === 'DELIVERY_BOY';
+    },
     save(token, user) {
         localStorage.setItem('fm_token', token);
         localStorage.setItem('fm_user', JSON.stringify(user));
@@ -33,6 +37,26 @@ const Auth = {
     requireAdmin() {
         if (!this.isLoggedIn() || !this.isAdmin()) {
             window.location.href = '/login.html?redirect=' + encodeURIComponent('/admin/dashboard.html');
+            return false;
+        }
+        return true;
+    },
+    /**
+     * Delivery staff land on their own dashboard. This is only a UX redirect —
+     * the real protection is Spring Security rejecting every non-delivery API
+     * for a DELIVERY_BOY token.
+     */
+    requireDeliveryBoy() {
+        if (!this.isLoggedIn()) {
+            window.location.href = '/login.html?redirect=' + encodeURIComponent('/delivery/dashboard.html');
+            return false;
+        }
+        if (this.isAdmin()) {
+            window.location.href = '/admin/dashboard.html';
+            return false;
+        }
+        if (!this.isDeliveryBoy()) {
+            window.location.href = '/';
             return false;
         }
         return true;
@@ -72,6 +96,30 @@ async function apiCall(url, options = {}) {
     return data;
 }
 
+async function downloadFile(url, filename) {
+    const token = Auth.getToken();
+    const headers = {};
+    if (token) headers['Authorization'] = 'Bearer ' + token;
+    const response = await fetch(API_BASE + url, { headers });
+    if (!response.ok) {
+        let message = 'Download failed';
+        try {
+            const d = await response.json();
+            message = d.message || d.error || message;
+        } catch (e) { /* ignore */ }
+        throw { message, status: response.status };
+    }
+    const blob = await response.blob();
+    const objectUrl = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = objectUrl;
+    a.download = filename || 'download.pdf';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+}
+
 async function uploadFile(file) {
     const formData = new FormData();
     formData.append('file', file);
@@ -89,7 +137,8 @@ async function uploadFile(file) {
     return data.data.url;
 }
 
-function showToast(message, type = 'success') {
+function showToast(message, type = 'success', options = {}) {
+    const opts = options || {};
     let container = document.getElementById('toast-container');
     if (!container) {
         container = document.createElement('div');
@@ -97,26 +146,76 @@ function showToast(message, type = 'success') {
         document.body.appendChild(container);
     }
     const el = document.createElement('div');
-    el.className = 'fm-toast ' + type;
+    el.className = 'fm-toast ' + type + (opts.title ? ' fm-toast-titled' : '');
     const iconMap = {
         success: 'fa-circle-check',
         error: 'fa-circle-xmark',
         warning: 'fa-triangle-exclamation',
         info: 'fa-circle-info'
     };
-    el.innerHTML = `<i class="fa-solid ${iconMap[type] || iconMap.info}"></i><span>${message}</span>`;
+    const icon = `<i class="fa-solid ${iconMap[type] || iconMap.info}"></i>`;
+    const body = opts.title
+        ? `<div class="fm-toast-body"><strong class="fm-toast-title">${escapeHtml(opts.title)}</strong><span>${escapeHtml(message)}</span></div>`
+        : `<span>${escapeHtml(message)}</span>`;
+    el.innerHTML = icon + body;
     container.appendChild(el);
+    const timeout = opts.title ? (opts.duration || 6000) : (opts.duration || 3200);
     setTimeout(() => {
         el.style.transition = 'opacity .3s, transform .3s';
         el.style.opacity = '0';
         el.style.transform = 'translateX(30px)';
         setTimeout(() => el.remove(), 300);
-    }, 3200);
+    }, timeout);
 }
 
 function fmtMoney(n) {
     const num = Number(n || 0);
     return '\u20B9' + num.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+/* ---------- Customer-facing order status (shared by the order list, the order
+   details timeline and the profile's recent orders) ----------
+
+   The customer sees exactly five milestones. The backend still uses
+   READY_FOR_PICKUP as an internal handover status between PREPARING and
+   OUT_FOR_DELIVERY, so it is mapped onto the Preparing step (preparation is
+   finished, the order has not left the store yet) instead of being shown as a
+   sixth stage of its own. The internal value itself is never displayed. */
+const CUSTOMER_ORDER_STEPS = [
+    { key: 'PLACED',         label: 'Order Placed' },
+    { key: 'CONFIRMED',      label: 'Confirmed' },
+    { key: 'PREPARING',      label: 'Preparing' },
+    { key: 'OUT_FOR_DELIVERY', label: 'Out for Delivery' },
+    { key: 'DELIVERED',      label: 'Delivered' }
+];
+
+/** Internal order status -> the customer stage key it is shown as. */
+const CUSTOMER_STATUS_STAGE = {
+    PLACED: 'PLACED',
+    CONFIRMED: 'CONFIRMED',
+    PREPARING: 'PREPARING',
+    READY_FOR_PICKUP: 'PREPARING',
+    OUT_FOR_DELIVERY: 'OUT_FOR_DELIVERY',
+    DELIVERED: 'DELIVERED'
+};
+
+/** Customer stage index for an order status, or -1 for CANCELLED/unknown. */
+function customerOrderStepIndex(status) {
+    const stage = CUSTOMER_STATUS_STAGE[status];
+    if (!stage) return -1;
+    return CUSTOMER_ORDER_STEPS.findIndex(s => s.key === stage);
+}
+
+/** Human-readable status label, never leaking the internal status name. */
+function customerOrderStatusLabel(status) {
+    const idx = customerOrderStepIndex(status);
+    return idx >= 0 ? CUSTOMER_ORDER_STEPS[idx].label : String(status || '').replace(/_/g, ' ');
+}
+
+/** Badge modifier class matching the displayed stage, for status-badge styling. */
+function customerOrderStatusClass(status) {
+    const stage = CUSTOMER_STATUS_STAGE[status];
+    return stage || 'CANCELLED';
 }
 
 function fmtDate(str) {
@@ -168,10 +267,12 @@ function initials(name) {
 
 async function updateCartCount() {
     const badge = document.querySelectorAll('.cart-count-badge');
-    if (badge.length === 0) return;
+    const hasBar = typeof window.refreshCartBar === 'function';
+    if (badge.length === 0 && !hasBar) return null;
     if (!Auth.isLoggedIn()) {
         badge.forEach(b => b.style.display = 'none');
-        return;
+        if (hasBar) window.refreshCartBar(null);
+        return null;
     }
     try {
         const res = await apiCall('/api/cart');
@@ -180,8 +281,13 @@ async function updateCartCount() {
             b.textContent = count > 99 ? '99+' : count;
             b.style.display = count > 0 ? 'flex' : 'none';
         });
+        if (hasBar) window.refreshCartBar(res.data);
+        return res.data;
     } catch (e) {
+        if (e.status === 401) Auth.clear();
         badge.forEach(b => b.style.display = 'none');
+        if (hasBar) window.refreshCartBar(null);
+        return null;
     }
 }
 
@@ -199,17 +305,25 @@ function renderSharedHeader(active) {
         </li>`;
 
     let accountHtml = '';
-    if (loggedIn && isAdmin) {
+    if (loggedIn) {
+        const cartHtml = `
+            <a class="nav-icon-btn" href="/cart.html" title="Cart">
+              <i class="fa-solid fa-basket-shopping"></i>
+              <span class="cart-count-badge" style="display:none">0</span>
+            </a>`;
+        const adminHtml = isAdmin
+            ? `<a class="nav-icon-btn" href="/admin/dashboard.html" title="Admin Panel"><i class="fa-solid fa-gauge-high"></i></a>`
+            : '';
         accountHtml = `
-            <a class="nav-icon-btn" href="/admin/dashboard.html" title="Admin Panel"><i class="fa-solid fa-gauge-high"></i></a>
-            <a class="user-chip" href="/profile.html"><span class="avatar">${initials(user.name)}</span>${escapeHtml(user.name.split(' ')[0])}</a>`;
-    } else if (loggedIn) {
-        accountHtml = `
+            ${cartHtml}
+            ${adminHtml}
             <a class="user-chip" href="/profile.html"><span class="avatar">${initials(user.name)}</span>${escapeHtml(user.name.split(' ')[0])}</a>
             <a class="nav-icon-btn" href="#" id="logout-btn" title="Logout"><i class="fa-solid fa-right-from-bracket"></i></a>`;
     } else {
         accountHtml = `
-            <a class="nav-icon-btn" href="/login.html" title="Login"><i class="fa-regular fa-user"></i></a>`;
+            <a class="btn btn-fm btn-sm rounded-pill px-3" href="/login.html" title="Login">
+              <i class="fa-solid fa-right-to-bracket me-1"></i>Login
+            </a>`;
     }
 
     header.innerHTML = `
@@ -226,10 +340,6 @@ function renderSharedHeader(active) {
           </ul>
           
           <div class="d-flex align-items-center gap-1 mt-2 mt-lg-0">
-            <a class="nav-icon-btn" href="/cart.html" title="Cart">
-              <i class="fa-solid fa-basket-shopping"></i>
-              <span class="cart-count-badge" style="display:none">0</span>
-            </a>
             ${accountHtml}
           </div>
         </div>
@@ -255,30 +365,51 @@ function gotoSearch() {
     window.location.href = '/shop.html' + (q ? '?search=' + encodeURIComponent(q) : '');
 }
 
-function renderSharedFooter() {
+async function renderSharedFooter() {
     const footer = document.getElementById('shared-footer');
     if (!footer) return;
+
+    let cs = null;
+    try {
+        const res = await apiCall('/api/contact-settings');
+        cs = res && res.data ? res.data : null;
+    } catch (e) {
+        cs = null;
+    }
+
+    const fallbackDescription = 'Fresh Cuts. Honest Prices. Delivered Fast. We bring premium quality meat, hygienically processed and delivered fresh to your doorstep.';
+    const description = cs && cs.businessDescription ? cs.businessDescription : fallbackDescription;
+    const address = cs && cs.address ? cs.address : '12, Meat Market Road, Chennai, Tamil Nadu 600001';
+    const phone = cs && cs.phone ? cs.phone : '+91 98765 43210';
+    const email = cs && cs.email ? cs.email : 'support@freshmeat.com';
+    const hours = cs && cs.businessHours ? cs.businessHours : 'Mon–Sun, 6 AM – 9 PM';
+
+    const socials = [
+        { url: cs ? cs.facebookUrl : '', icon: 'fa-brands fa-facebook-f' },
+        { url: cs ? cs.instagramUrl : '', icon: 'fa-brands fa-instagram' },
+        { url: cs ? cs.twitterUrl : '', icon: 'fa-brands fa-x-twitter' },
+        { url: cs ? cs.youtubeUrl : '', icon: 'fa-brands fa-youtube' }
+    ].filter(s => s.url);
+    const socialHtml = socials.length
+        ? `<div class="social-icons mt-3">${socials.map(s => `<a href="${escapeHtml(s.url)}" target="_blank" rel="noopener"><i class="${s.icon}"></i></a>`).join('')}</div>`
+        : '';
+
     footer.innerHTML = `
       <footer class="footer-fm">
         <div class="container">
           <div class="row g-4 align-items-start footer-main">
             <div class="col-lg-7 col-md-12">
               <h5 class="fw-bold" style="font-family:var(--font-head);font-size:1.4rem;">Fresh<span style="color:var(--gold)">Meat</span></h5>
-              <p class="mt-2" style="font-size:0.88rem;">Fresh Cuts. Honest Prices. Delivered Fast. We bring premium quality meat, hygienically processed and delivered fresh to your doorstep.</p>
-              <div class="social-icons mt-3">
-                <a href="#"><i class="fa-brands fa-facebook-f"></i></a>
-                <a href="#"><i class="fa-brands fa-instagram"></i></a>
-                <a href="#"><i class="fa-brands fa-x-twitter"></i></a>
-                <a href="#"><i class="fa-brands fa-youtube"></i></a>
-              </div>
+              <p class="mt-2" style="font-size:0.88rem;">${escapeHtml(description)}</p>
+              ${socialHtml}
             </div>
             <div class="col-lg-5 col-md-12 footer-contact-col">
               <h5>Contact</h5>
               <ul class="list-unstyled f-contact">
-                <li><i class="fa-solid fa-location-dot"></i><span>12, Meat Market Road, Chennai, Tamil Nadu 600001</span></li>
-                <li><i class="fa-solid fa-phone"></i><span>+91 98765 43210</span></li>
-                <li><i class="fa-solid fa-envelope"></i><span>support@freshmeat.com</span></li>
-                <li><i class="fa-solid fa-clock"></i><span>Mon–Sun, 6 AM – 9 PM</span></li>
+                <li><i class="fa-solid fa-location-dot"></i><span>${escapeHtml(address)}</span></li>
+                <li><i class="fa-solid fa-phone"></i><span>${escapeHtml(phone)}</span></li>
+                <li><i class="fa-solid fa-envelope"></i><span>${escapeHtml(email)}</span></li>
+                <li><i class="fa-solid fa-clock"></i><span>${escapeHtml(hours)}</span></li>
               </ul>
             </div>
           </div>
@@ -318,7 +449,7 @@ function productCardHtml(p) {
 
     let stockHtml;
     if (outOfStock) stockHtml = '<span class="out-stock"><i class="fa-solid fa-circle"></i> Out of Stock</span>';
-    else if (lowStock) stockHtml = `<span class="low-stock"><i class="fa-solid fa-circle"></i> Only ${p.stockQuantity} KG left</span>`;
+    else if (lowStock) stockHtml = `<span class="low-stock"><i class="fa-solid fa-circle"></i> Only ${p.stockQuantity} ${p.unit || 'KG'} left</span>`;
     else stockHtml = '<span class="in-stock"><i class="fa-solid fa-circle"></i> In Stock</span>';
 
     return `
@@ -326,9 +457,11 @@ function productCardHtml(p) {
       <div class="card card-fm product-card">
         <div class="product-img">
           <img src="${escapeHtml(img)}" alt="${escapeHtml(p.name)}" loading="lazy">
-          ${p.freshToday ? '<span class="badge-fm green"><i class="fa-solid fa-leaf"></i> Fresh Today</span>' : ''}
-          ${disc > 0 ? `<span class="badge-fm gold">${Math.round(disc)}% OFF</span>` : ''}
-          ${outOfStock ? '<span class="badge-fm dark">Out of Stock</span>' : ''}
+          <div class="product-badges">
+            ${disc > 0 ? `<span class="badge-fm gold">${Math.round(disc)}% OFF</span>` : ''}
+            ${p.freshToday ? '<span class="badge-fm green"><i class="fa-solid fa-leaf"></i> Fresh Today</span>' : ''}
+            ${outOfStock ? '<span class="badge-fm dark">Out of Stock</span>' : ''}
+          </div>
           <button class="quick-view-btn" onclick="openQuickView(${p.id})" title="Quick View"><i class="fa-solid fa-eye"></i></button>
         </div>
         <div class="product-body">
@@ -338,7 +471,7 @@ function productCardHtml(p) {
           <div class="price-row">
             <span class="price-now">${fmtMoney(eff)}</span>
             ${disc > 0 ? `<span class="price-was">${fmtMoney(p.pricePerKg)}</span>` : ''}
-            <span class="price-off">/${p.minOrderQty ? 'KG' : 'KG'}</span>
+            <span class="price-off">/${escapeHtml((p.unit || 'KG').toUpperCase())}</span>
           </div>
           <div class="stock-inline">${stockHtml}</div>
           <div class="product-actions">
@@ -371,7 +504,12 @@ async function quickAddToCart(event, productId) {
             body: { productId, quantity: 1, cuttingOption }
         });
         showToast('Added to cart!');
-        updateCartCount();
+        if (typeof window.refreshCartBar === 'function') {
+            const cart = await updateCartCount();
+            window.refreshCartBar(cart, { added: true });
+        } else {
+            updateCartCount();
+        }
     } catch (err) {
         showToast(err.message || 'Could not add to cart', 'error');
     }
@@ -385,7 +523,7 @@ function openQuickView(id) {
             const eff = effectivePrice(p);
             const disc = Number(p.discountPercent || 0);
             const outOfStock = !p.available || Number(p.stockQuantity) <= 0;
-            const img = p.imageUrl || 'https://placehold.co/600x600/2d2d2d/f5f0e8?text=FreshMeat';
+            const img = p.imageUrl || '/images/default-meat.jpg';
 
             document.getElementById('quick-view-body').innerHTML = `
             <div class="row g-0">
@@ -401,11 +539,11 @@ function openQuickView(id) {
                   <div class="price-row mb-3">
                     <span class="pd-price">${fmtMoney(eff)}</span>
                     ${disc > 0 ? `<span class="pd-price-was">${fmtMoney(p.pricePerKg)}</span><span class="pd-price-off">${Math.round(disc)}% OFF</span>` : ''}
-                    <span class="ms-1 text-muted small">/KG</span>
+                    <span class="ms-1 text-muted small">${'/' + (p.unit || 'KG').toUpperCase()}</span>
                   </div>
                   ${outOfStock
                     ? '<span class="badge-fm dark">Out of Stock</span>'
-                    : `<span class="badge-fm green"><i class="fa-solid fa-circle"></i> ${p.stockQuantity > 8 ? 'In Stock' : 'Only ' + p.stockQuantity + ' KG left'}</span>`}
+                    : `<span class="badge-fm green"><i class="fa-solid fa-circle"></i> ${p.stockQuantity > 8 ? 'In Stock' : 'Only ' + p.stockQuantity + ' ' + (p.unit || 'KG') + ' left'}</span>`}
                   <div class="d-flex gap-2 mt-4">
                     <button class="btn btn-fm-outline" onclick="window.location.href='/product-details.html?id=${p.id}';">
                       <i class="fa-regular fa-eye me-1"></i>Full Details</button>

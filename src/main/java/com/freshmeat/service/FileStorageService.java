@@ -24,13 +24,17 @@ public class FileStorageService {
     @Value("${app.upload.path}")
     private String uploadPath;
 
+    private static final String UPLOADS_ROOT = "/uploads/products/";
+    private static final String UPLOADS_LEGACY = "/uploads/";
+
     /**
      * Validates and stores an uploaded image under the configured upload
      * directory (e.g. uploads/products/). Returns the public URL path to be
-     * stored on the product record, e.g. /uploads/name-uuid.jpg
+     * stored on the product record, e.g. /uploads/products/name-uuid.jpg
      *
-     * WebConfig maps /uploads/** to the upload directory (uploads/products),
-     * so the public path is /uploads/<filename>.
+     * WebConfig maps /uploads/products/** (and legacy /uploads/**) to the
+     * upload directory (uploads/products), so the public path is
+     * /uploads/products/<filename>.
      */
     public String storeImage(MultipartFile file) {
         if (file == null || file.isEmpty()) {
@@ -55,7 +59,7 @@ public class FileStorageService {
             Files.createDirectories(dir);
             Path target = dir.resolve(fileName);
             file.transferTo(target);
-            return "/uploads/" + fileName;
+            return UPLOADS_ROOT + fileName;
         } catch (IOException e) {
             throw new RuntimeException("Failed to store image", e);
         }
@@ -67,10 +71,17 @@ public class FileStorageService {
      * shared, or non-upload paths.
      */
     public boolean deleteUploadedFile(String publicPath) {
-        if (publicPath == null || !publicPath.startsWith("/uploads/")) {
+        if (publicPath == null) {
             return false;
         }
-        String fileName = publicPath.substring("/uploads/".length());
+        String fileName;
+        if (publicPath.startsWith(UPLOADS_ROOT)) {
+            fileName = publicPath.substring(UPLOADS_ROOT.length());
+        } else if (publicPath.startsWith(UPLOADS_LEGACY)) {
+            fileName = publicPath.substring(UPLOADS_LEGACY.length());
+        } else {
+            return false;
+        }
         if (fileName.isEmpty() || fileName.contains("..")) {
             return false;
         }

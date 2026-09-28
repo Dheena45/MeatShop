@@ -14,6 +14,164 @@
 
 <div id="admin-shell"></div>
 
+<!-- Monthly sales summary modal (THIS MONTH card click) -->
+<div class="modal fade" id="revenueModal" tabindex="-1" aria-labelledby="revenueModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="revenueModalLabel"><i class="fa-solid fa-sack-dollar me-2 text-primary"></i>Monthly Sales Summary</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div class="mb-3">
+          <div class="text-muted" style="font-size:0.72rem;text-transform:uppercase;letter-spacing:0.5px;" id="sales-summary-period">This Month</div>
+          <div class="fs-3 fw-bold" style="color:var(--primary);" id="sales-summary-amount">&mdash;</div>
+        </div>
+        <div class="row g-2" id="revenue-summary-grid"></div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn-admin-outline" data-bs-dismiss="modal">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Yearly Business Summary modal (THIS YEAR card click) -->
+<div class="modal fade" id="yearlyModal" tabindex="-1" aria-labelledby="yearlyModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="yearlyModalLabel"><i class="fa-solid fa-calendar me-2 text-primary"></i>Yearly Business Summary</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div class="text-muted small mb-3" id="yearly-modal-subtitle">Business overview</div>
+        <label class="form-label d-block">Sales Summary</label>
+        <div class="row g-2 mb-3" id="yearly-sales-grid"></div>
+        <label class="form-label d-block">Order Status</label>
+        <div class="row g-2 mb-3" id="yearly-status-grid"></div>
+        <label class="form-label d-block">Customers</label>
+        <div class="row g-2 mb-3" id="yearly-customers-grid"></div>
+        <label class="form-label d-block">Inventory</label>
+        <div class="row g-2 mb-3" id="yearly-inventory-grid"></div>
+        <div id="yearly-extra-wrap" class="d-none">
+          <label class="form-label d-block">Additional Metrics</label>
+          <div class="row g-2 mb-3" id="yearly-extra-grid"></div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn-admin-outline" data-bs-dismiss="modal">Close</button>
+        <button type="button" class="btn-admin" id="yearly-view-orders"><i class="fa-solid fa-truck-fast me-1"></i>View Orders</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Order statistics modal -->
+<div class="modal fade" id="ordersModal" tabindex="-1" aria-labelledby="ordersModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="ordersModalLabel"><i class="fa-solid fa-box-open me-2" style="color:var(--gold);"></i>Order Summary</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div class="mb-3">
+          <div class="text-muted" style="font-size:0.72rem;text-transform:uppercase;letter-spacing:0.5px;">Total Orders</div>
+          <div class="fs-3 fw-bold" style="color:var(--gold);" id="orders-summary-total">&mdash;</div>
+        </div>
+        <div class="row g-2" id="orders-stat-grid"></div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn-admin-outline" data-bs-dismiss="modal">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Customer summary modal -->
+<div class="modal fade" id="customersModal" tabindex="-1" aria-labelledby="customersModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="customersModalLabel"><i class="fa-solid fa-users me-2" style="color:var(--success);"></i>Customer Summary</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div class="row g-2" id="customer-summary-grid"></div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn-admin-outline" data-bs-dismiss="modal">Close</button>
+        <button type="button" class="btn-admin" id="customers-view-btn"><i class="fa-solid fa-users me-1"></i>View Customers</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Inventory alert modal -->
+<div class="modal fade" id="inventoryModal" tabindex="-1" aria-labelledby="inventoryModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="inventoryModalLabel"><i class="fa-solid fa-boxes-stacked me-2" style="color:#f97316;"></i>Inventory Alert</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div class="row g-2 mb-3" id="inventory-summary-grid"></div>
+        <div id="inventory-lists"></div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn-admin-outline" data-bs-dismiss="modal">Close</button>
+        <button type="button" class="btn-admin" id="inventory-manage-btn"><i class="fa-solid fa-boxes-stacked me-1"></i>Manage Inventory</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Month detail modal (revenue trend click) -->
+<div class="modal fade" id="monthModal" tabindex="-1" aria-labelledby="monthModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="monthModalLabel"><i class="fa-solid fa-calendar-day me-2 text-primary"></i>Month Details</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div class="mb-3"><strong id="month-modal-period" class="fs-5"></strong></div>
+        <div class="row g-2" id="month-modal-grid"></div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn-admin-outline" data-bs-dismiss="modal">Close</button>
+        <button type="button" class="btn-admin" id="month-view-orders"><i class="fa-solid fa-truck-fast me-1"></i>View Orders</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Product sales details modal (Top Selling Products bar click) -->
+<div class="modal fade" id="productSalesModal" tabindex="-1" aria-labelledby="productSalesModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="productSalesModalLabel"><i class="fa-solid fa-drumstick-bite me-2" style="color:var(--primary);"></i>Product Sales Details</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div class="mb-3">
+          <strong id="ps-product-name" class="fs-5"></strong>
+          <div id="ps-product-meta" class="text-muted small mt-1"></div>
+        </div>
+        <div class="row g-2 mb-3" id="ps-summary-grid"></div>
+        <label class="form-label">Recent Orders</label>
+        <div id="ps-orders-body" class="table-responsive" style="max-height:40vh;overflow:auto;"></div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn-admin-outline" data-bs-dismiss="modal">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.3/js/bootstrap.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
 <script src="/js/app.js"></script>

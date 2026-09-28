@@ -45,7 +45,7 @@ function renderCart(cart) {
         const original = Number(item.unitPrice || eff);
         const discounted = original > eff;
         const outStock = !item.available || Number(item.availableStock) <= 0;
-        const img = item.productImage || 'https://placehold.co/600x600/2d2d2d/f5f0e8?text=FreshMeat';
+        const img = item.productImage || '/images/default-meat.jpg';
         return `
         <div class="cart-line" data-id="${item.id}">
           <a href="/product-details.html?id=${item.productId}">

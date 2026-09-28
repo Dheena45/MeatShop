@@ -37,6 +37,32 @@
   </div>
 </div>
 
+<!-- Cancel order confirmation modal -->
+<div class="modal fade" id="cancelOrderModal" tabindex="-1" aria-labelledby="cancelOrderModalLabel" data-bs-backdrop="static" data-bs-keyboard="false">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="cancelOrderModalLabel"><i class="fa-solid fa-ban text-danger me-2"></i>Cancel Order</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body text-center pb-2">
+        <div class="confirm-icon"><i class="fa-solid fa-triangle-exclamation"></i></div>
+        <p class="mb-0 fw-semibold">Are you sure you want to cancel this order?</p>
+        <div class="confirm-order-info">
+          <span>Order No: <strong id="cancelOrderNo">-</strong></span>
+          <span>Items: <strong id="cancelOrderItems">-</strong></span>
+          <span>Total: <strong id="cancelOrderTotal">-</strong></span>
+        </div>
+        <p class="small text-muted mt-3 mb-0"><i class="fa-solid fa-circle-info me-1"></i>This action cannot be undone.</p>
+      </div>
+      <div class="modal-footer border-0 justify-content-center pb-4 pt-2">
+        <button type="button" class="btn btn-fm-outline" data-bs-dismiss="modal">Keep Order</button>
+        <button type="button" class="btn btn-danger-fm" id="confirmCancelBtn" onclick="confirmCancelOrder()">Cancel Order</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.3/js/bootstrap.bundle.min.js"></script>
 <script src="/js/app.js"></script>
 <script src="/js/orders.js"></script>

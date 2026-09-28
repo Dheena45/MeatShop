@@ -12,7 +12,11 @@ public interface ProductRepository extends JpaRepository<Product, Long>, JpaSpec
 
     List<Product> findByCategoryIdAndAvailableTrue(Long categoryId);
 
+    long countByCategoryId(Long categoryId);
+
     List<Product> findByAvailableTrue();
+
+    long countByAvailable(boolean available);
 
     List<Product> findByFreshTodayTrueAndAvailableTrue();
 

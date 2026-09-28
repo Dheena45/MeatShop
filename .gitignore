@@ -1,1 +1,9 @@
-target/ 
+target/
+.idea/
+.vscode/
+*.iml
+.run/
+*.log
+app-err.log
+app-out.log
+.env

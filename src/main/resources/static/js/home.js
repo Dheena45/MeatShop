@@ -3,111 +3,115 @@
 function getActiveNavKey() { return 'home'; }
 
 document.addEventListener('DOMContentLoaded', function () {
-    loadCategories();
-    loadBestSellers();
-    loadOffers();
-    loadPopular();
+    loadHeroStats();
     loadReviews();
+    initContactForm();
 });
 
-async function loadCategories() {
-    const grid = document.getElementById('categories-grid');
+async function loadHeroStats() {
+    const premiumEl = document.getElementById('stat-premium-cuts');
+    const customersEl = document.getElementById('stat-happy-customers');
+    if (!premiumEl && !customersEl) return;
     try {
-        const res = await apiCall('/api/categories');
-        const cats = res.data || [];
-        if (!cats.length) {
-            grid.innerHTML = emptyState('No categories yet');
-            return;
-        }
-        grid.innerHTML = cats.map(c => `
-            <div class="col-6 col-md-4 col-lg-3">
-              <a href="/shop.html?category=${c.id}" class="text-decoration-none">
-                <div class="card card-fm cat-card">
-                  <div class="cat-icon"><i class="fa-solid fa-drumstick-bite"></i></div>
-                  <h6>${escapeHtml(c.name)}</h6>
-                  <small>Fresh ready-to-cook</small>
-                </div>
-              </a>
-            </div>`).join('');
+        const res = await apiCall('/api/site-settings');
+        const s = (res && res.data) || {};
+        if (premiumEl) premiumEl.textContent = escapeHtml(s.premiumCuts || '');
+        if (customersEl) customersEl.textContent = escapeHtml(s.happyCustomers || '');
     } catch (e) {
-        grid.innerHTML = emptyState('Could not load categories.<br><button class="btn btn-fm btn-sm mt-2" onclick="loadCategories()">Retry</button>');
+        if (premiumEl) premiumEl.textContent = '—';
+        if (customersEl) customersEl.textContent = '—';
     }
 }
 
-async function loadBestSellers() {
-    const grid = document.getElementById('bestsellers-grid');
-    try {
-        const res = await apiCall('/api/products?sort=popularity&size=8');
-        const list = res.data.content || [];
-        if (!list.length) {
-            grid.innerHTML = emptyState('Products coming soon');
-            return;
-        }
-        grid.innerHTML = list.map(p => productCardHtml(p)).join('');
-    } catch (e) {
-        grid.innerHTML = emptyState('Could not load products.<br><button class="btn btn-fm btn-sm mt-2" onclick="loadBestSellers()">Retry</button>');
-    }
+function initContactForm() {
+    const btn = document.getElementById('contact-send-btn');
+    if (btn) btn.addEventListener('click', sendContactMessage);
 }
 
-async function loadOffers() {
-    const grid = document.getElementById('offers-products');
-    try {
-        // Show fresh and discounted products as offers
-        const res = await apiCall('/api/products?size=8&sort=popularity');
-        const list = res.data.content || [];
-        if (!list.length) {
-            grid.innerHTML = emptyState('Check back soon for offers');
-            return;
-        }
-        grid.innerHTML = list.map(p => productCardHtml(p)).join('');
-    } catch (e) {
-        grid.innerHTML = '';
-    }
-}
+async function sendContactMessage() {
+    const msgInput = document.getElementById('contact-msg');
+    const btn = document.getElementById('contact-send-btn');
+    if (!msgInput || !btn) return;
 
-async function loadPopular() {
-    const grid = document.getElementById('popular-grid');
+    if (!Auth.isLoggedIn()) {
+        showToast('Please login to send a message.', 'warning');
+        setTimeout(() => window.location.href = '/login.html?redirect=/index.html', 1400);
+        return;
+    }
+
+    const message = msgInput.value.trim();
+
+    if (!message) {
+        showToast('Please enter your message.', 'warning');
+        msgInput.focus();
+        return;
+    }
+    if (message.length > 2000) {
+        showToast('Message must be at most 2000 characters.', 'warning');
+        msgInput.focus();
+        return;
+    }
+
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Sending...';
+
     try {
-        const res = await apiCall('/api/products/list/popular');
-        const list = res.data || [];
-        if (!list.length) {
-            grid.innerHTML = '';
-            return;
-        }
-        grid.innerHTML = list.map(p => productCardHtml(p)).join('');
+        await apiCall('/api/contact/messages', { method: 'POST', body: { message } });
+        showToast('Message sent successfully.');
+        msgInput.value = '';
     } catch (e) {
-        grid.innerHTML = '';
+        if (e.status === 401) {
+            showToast('Please login to send a message.', 'warning');
+            setTimeout(() => window.location.href = '/login.html?redirect=/index.html', 1400);
+        } else {
+            let msg = 'Unable to send your message. Please try again.';
+            if (e.status === 400 && e.message) msg = e.message;
+            showToast(msg, 'error');
+        }
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = 'Send Message';
     }
 }
 
 async function loadReviews() {
     const grid = document.getElementById('reviews-grid');
-    const defaultReviews = [
-        { userEmail: 'Priya S.', rating: 5, comment: 'The mutton was so fresh and the biryani cut was perfect. Delivery was on time!', createdAt: new Date().toISOString() },
-        { userEmail: 'Rahul K.', rating: 4, comment: 'Great quality chicken, clean packing. Slightly late delivery but the product was excellent.', createdAt: new Date().toISOString() },
-        { userEmail: 'Deepa R.', rating: 5, comment: 'Finally a meat shop I can trust. Hygienic, fresh and fair prices. Highly recommend!', createdAt: new Date().toISOString() }
-    ];
-    let reviews = defaultReviews;
+    if (!grid) return;
+
+    let reviews = [];
     try {
-        const res = await apiCall('/api/reviews/recent');
-        if (res.data && res.data.length >= 3) reviews = res.data;
-    } catch (e) { /* keep defaults */ }
+        const res = await apiCall('/api/reviews');
+        reviews = res.data || [];
+    } catch (e) {
+        console.error('GET /api/reviews failed:', e);
+        grid.innerHTML = `<div class="col-12"><div class="empty-state">
+            <div class="es-icon"><i class="fa-regular fa-star"></i></div>
+            <h6>Reviews are not available right now</h6>
+            <p>Please try again later.</p>
+            <a href="#" class="btn btn-fm btn-sm mt-2" onclick="loadReviews();return false;">Retry</a>
+        </div></div>`;
+        return;
+    }
+
+    if (!reviews.length) {
+        grid.innerHTML = `<div class="col-12"><div class="empty-state">
+            <div class="es-icon"><i class="fa-regular fa-star"></i></div>
+            <h6>No reviews yet</h6>
+            <p>Be the first customer to share your experience.</p></div></div>`;
+        return;
+    }
 
     grid.innerHTML = reviews.slice(0, 3).map(r => `
         <div class="col-md-4">
           <div class="card card-fm testimonial-card">
             <span class="quote-mark">"</span>
-            <div class="t-stars">${'★'.repeat(r.rating)}${'☆'.repeat(5 - r.rating)}</div>
+            <div class="t-stars">${'★'.repeat(Math.min(5, Math.max(0, r.rating || 0)))}${'☆'.repeat(5 - Math.min(5, Math.max(0, r.rating || 0)))}</div>
             <p>"${escapeHtml(r.comment)}"</p>
             <div class="t-user">
-              <div class="avatar">${initials((r.userEmail || 'FR').split('@')[0])}</div>
-              <div><strong>${escapeHtml((r.userEmail || 'FreshMeat User').split('@')[0])}</strong>
+              <div class="avatar">${initials(r.customerName || 'FR')}</div>
+              <div><strong>${escapeHtml(r.customerName || 'FreshMeat User')}</strong>
               <span>${r.createdAt ? fmtDateOnly(r.createdAt) : ''}</span></div>
             </div>
           </div>
         </div>`).join('');
-}
-
-function emptyState(msg) {
-    return `<div class="col-12"><div class="empty-state"><div class="es-icon"><i class="fa-solid fa-store"></i></div><h6>${msg}</h6></div></div>`;
 }

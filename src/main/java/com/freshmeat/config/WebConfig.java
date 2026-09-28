@@ -21,11 +21,17 @@ public class WebConfig implements WebMvcConfigurer {
         registry.addResourceHandler("/images/**")
                 .addResourceLocations("classpath:/static/images/");
 
-        // Uploaded product images
+        // Uploaded product images are stored under uploads/products.
+        // Serve them at /uploads/products/** (current scheme) and keep the
+        // legacy /uploads/** handler so older /uploads/<file> references
+        // recorded in the DB before the scheme change still resolve.
         String absolutePath = Paths.get(uploadPath)
                 .toAbsolutePath()
                 .toUri()
                 .toString();
+
+        registry.addResourceHandler("/uploads/products/**")
+                .addResourceLocations(absolutePath);
 
         registry.addResourceHandler("/uploads/**")
                 .addResourceLocations(absolutePath);

@@ -2,14 +2,38 @@
 
 function getActiveNavKey() { return 'shop'; }
 
+// Sticky bottom cart bar — refreshed from the existing /api/cart response.
+// UpdateCartCount() in app.js calls this on every successful cart fetch, so the
+// bar stays in sync with adds, the header badge, and page reloads.
+window.refreshCartBar = function (cart, opts) {
+    const bar = document.getElementById('cart-bar');
+    if (!bar) return;
+    const items = (cart && cart.items) || [];
+    if (!cart || items.length === 0) {
+        bar.style.display = 'none';
+        document.body.classList.remove('has-cart-bar');
+        return;
+    }
+    const count = Number(cart.totalItems || 0);
+    const total = cart.grandTotal != null ? cart.grandTotal : (cart.subtotal || 0);
+    const added = !!(opts && opts.added);
+    const label = count + ' ' + (count === 1 ? 'item' : 'items') + (added ? ' added to cart' : ' in your cart');
+    const countEl = document.getElementById('cart-bar-count');
+    const totalEl = document.getElementById('cart-bar-total');
+    if (countEl) countEl.textContent = label;
+    if (totalEl) totalEl.textContent = 'Total: ' + fmtMoney(total);
+    bar.style.display = 'block';
+    document.body.classList.add('has-cart-bar');
+};
+
 const state = {
     page: 0,
     size: 12,
-    totalPages: 0,
-    sort: 'default'
+    totalPages: 0
 };
 
 document.addEventListener('DOMContentLoaded', function () {
+    if (!Auth.requireLogin()) return;
     const searchInput = document.getElementById('shop-search');
     searchInput.value = getUrlParam('search') || '';
     searchInput.addEventListener('input', debounce(() => {
@@ -19,14 +43,6 @@ document.addEventListener('DOMContentLoaded', function () {
 
     loadCategories();
     loadProducts();
-
-    // update URL query string to reflect search for shareability
-    const priceSlider = document.getElementById('price-slider');
-    if (priceSlider) {
-        priceSlider.addEventListener('input', () => {
-            document.getElementById('max-price').value = priceSlider.value;
-        });
-    }
 });
 
 function getUrlParam(name) {
@@ -58,22 +74,6 @@ async function loadCategories() {
     }
 }
 
-function buildRatingFilters() {
-    const container = document.getElementById('rating-filters');
-    [4, 3, 2, 0].forEach(r => {
-        const label = r === 0 ? 'Any Rating' : `${r}+ ★`;
-        container.innerHTML += `
-            <div class="form-check">
-              <input class="form-check-input rating-filter" type="radio" name="ratingFilter" value="${r}" ${r === 0 ? 'checked' : ''}>
-              <label class="form-check-label" for="">${label}</label>
-            </div>`;
-    });
-    document.querySelectorAll('.rating-filter').forEach(el => {
-        el.addEventListener('change', () => { state.page = 0; applyFilters(); });
-    });
-}
-buildRatingFilters();
-
 function buildParams() {
     const params = new URLSearchParams();
     const search = document.getElementById('shop-search').value.trim();
@@ -81,20 +81,6 @@ function buildParams() {
 
     const cat = document.querySelector('input[name="catFilter"]:checked');
     if (cat && cat.value) params.set('categoryId', cat.value);
-
-    const minPrice = document.getElementById('min-price').value;
-    const maxPrice = document.getElementById('max-price').value;
-    if (minPrice) params.set('minPrice', minPrice);
-    if (maxPrice) params.set('maxPrice', maxPrice);
-
-    const rating = document.querySelector('input[name="ratingFilter"]:checked');
-    if (rating && rating.value && Number(rating.value) > 0) params.set('minRating', rating.value);
-
-    const inStock = document.getElementById('in-stock').checked;
-    if (inStock) params.set('inStock', 'true');
-
-    const sort = document.getElementById('sort-select').value;
-    if (sort && sort !== 'default') params.set('sort', sort);
 
     params.set('page', state.page);
     params.set('size', state.size);
@@ -137,16 +123,31 @@ async function loadProducts() {
     }
 }
 
+function pagerItems(current, totalPages) {
+    const candidates = new Set([0, totalPages - 1, current - 1, current, current + 1]);
+    const pages = [...candidates].filter(p => p >= 0 && p < totalPages).sort((a, b) => a - b);
+    const items = [];
+    let prev = -1;
+    for (const p of pages) {
+        if (prev !== -1 && p - prev > 1) items.push('...');
+        items.push(p);
+        prev = p;
+    }
+    return items;
+}
+
 function renderPagination() {
     const el = document.getElementById('shop-pagination');
     if (state.totalPages <= 1) { el.innerHTML = ''; return; }
-    let html = `<button ${state.page === 0 ? 'disabled' : ''} onclick="goPage(${state.page - 1})"><i class="fa-solid fa-chevron-left"></i></button>`;
-    for (let i = 0; i < state.totalPages; i++) {
-        if (i >= state.page - 2 && i <= state.page + 2) {
-            html += `<button class="${i === state.page ? 'active' : ''}" onclick="goPage(${i})">${i + 1}</button>`;
+    let html = `<button class="page-btn prev" ${state.page === 0 ? 'disabled' : ''} onclick="goPage(${state.page - 1})" aria-label="Previous page">&#8249;</button>`;
+    for (const item of pagerItems(state.page, state.totalPages)) {
+        if (item === '...') {
+            html += '<span class="page-dots">&#8230;</span>';
+        } else {
+            html += `<button class="page-btn${item === state.page ? ' active' : ''}" onclick="goPage(${item})">${item + 1}</button>`;
         }
     }
-    html += `<button ${state.page >= state.totalPages - 1 ? 'disabled' : ''} onclick="goPage(${state.page + 1})"><i class="fa-solid fa-chevron-right"></i></button>`;
+    html += `<button class="page-btn next" ${state.page >= state.totalPages - 1 ? 'disabled' : ''} onclick="goPage(${state.page + 1})" aria-label="Next page">&#8250;</button>`;
     el.innerHTML = html;
 }
 
@@ -154,19 +155,5 @@ function goPage(page) {
     state.page = page;
     loadProducts();
     window.scrollTo({ top: 0, behavior: 'smooth' });
-}
-
-function resetFilters() {
-    document.getElementById('shop-search').value = '';
-    document.querySelectorAll('input[name="catFilter"]').forEach(el => { el.checked = el.value === ''; });
-    document.querySelectorAll('input[name="ratingFilter"]').forEach(el => { el.checked = Number(el.value) === 0; });
-    document.getElementById('in-stock').checked = false;
-    document.getElementById('min-price').value = '';
-    document.getElementById('max-price').value = '';
-    document.getElementById('price-slider').value = '1000';
-    document.getElementById('sort-select').value = 'default';
-    history.replaceState(null, '', '/shop.html');
-    state.page = 0;
-    loadProducts();
 }
 

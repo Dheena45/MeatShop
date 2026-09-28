@@ -1,6 +1,15 @@
 /* FreshMeat — Order tracking controller */
 
-const ORDER_STEPS = ['PLACED', 'CONFIRMED', 'PREPARING', 'OUT_FOR_DELIVERY', 'DELIVERED'];
+/* The customer-facing milestones are defined once, in app.js, and are exactly
+   five: Order Placed -> Confirmed -> Preparing -> Out for Delivery -> Delivered.
+   They are intentionally not duplicated here.
+
+   Two things stay internal and are never shown to the customer:
+     - the Delivery Boy confirmation step (OrderDTO.delivery is admin/delivery
+       boy only), and
+     - READY_FOR_PICKUP, the backend handover status the store uses between
+       PREPARING and OUT_FOR_DELIVERY. It is mapped onto the Preparing stage by
+       customerOrderStepIndex() so it never becomes a step of its own. */
 
 document.addEventListener('DOMContentLoaded', function () {
     if (!Auth.requireLogin()) return;
@@ -32,16 +41,15 @@ function renderTracking(o) {
     content.classList.remove('d-none');
 
     const cancelled = o.status === 'CANCELLED';
-    const currentIdx = cancelled ? -1 : ORDER_STEPS.indexOf(o.status);
+    const currentIdx = customerOrderStepIndex(o.status);
 
-    const timeline = ORDER_STEPS.map((step, i) => {
-        const display = step.replace(/_/g, ' ');
+    const timeline = CUSTOMER_ORDER_STEPS.map((step, i) => {
         const cls = i < currentIdx ? 'done' : (i === currentIdx ? 'active' : '');
         const icon = i <= currentIdx ? 'fa-solid fa-circle-check' : 'fa-regular fa-circle';
         return `
         <div class="timeline-step ${cls}">
             <div class="timeline-dot"><i class="${icon}"></i></div>
-            <span>${display}</span>
+            <span>${step.label}</span>
         </div>`;
     }).join('');
 
@@ -54,7 +62,7 @@ function renderTracking(o) {
                 </div>
                 <div class="text-end">
                     <small class="text-muted">Status</small><br>
-                    <span class="status-badge status-${o.status}">${o.status.replace(/_/g, ' ')}</span>
+                    <span class="status-badge status-${customerOrderStatusClass(o.status)}">${escapeHtml(customerOrderStatusLabel(o.status))}</span>
                 </div>
             </div>
 
@@ -98,12 +106,20 @@ function renderTracking(o) {
                     <h6 class="fw-bold text-dark">Delivery Info</h6>
                     <div><i class="fa-solid fa-clock me-1"></i>Slot: ${escapeHtml(o.deliverySlot)}</div>
                     <div><i class="fa-solid fa-user me-1"></i>${escapeHtml(o.customerName)} (${escapeHtml(o.customerPhone)})</div>
-                    <div><i class="fa-solid fa-credit-card me-1"></i>${(o.paymentMethod || '').replace(/_/g, ' ')}</div>
+                    <div>
+                        <i class="fa-solid fa-credit-card me-1"></i>${(o.paymentMethod || '').replace(/_/g, ' ')}
+                        <span class="status-badge status-${o.paymentStatus || 'PENDING'}">${(o.paymentStatus || 'PENDING').replace(/_/g, ' ')}</span>
+                    </div>
+                    ${o.paymentStatus === 'PAID'
+                        ? `<div><i class="fa-solid fa-circle-check me-1" style="color:var(--success)"></i>Paid ${fmtMoney(o.paidAmount || o.grandTotal)}${o.paidAt ? ' on ' + fmtDateOnly(o.paidAt) : ''}</div>`
+                        : ''}
                     <div><i class="fa-solid fa-calendar me-1"></i>Placed: ${fmtDate(o.createdAt)}</div>
                 </div>
             </div>
-            <div class="mt-3">
+            <div class="mt-3 d-flex flex-wrap gap-2">
                 <a href="/orders.html" class="btn btn-fm-outline btn-sm"><i class="fa-solid fa-arrow-left me-1"></i>View All Orders</a>
+                ${o.status !== 'CANCELLED' ? `
+                <button class="btn btn-fm btn-sm" onclick="window.open('/invoice.html?order=${o.id}','_blank')"><i class="fa-solid fa-file-invoice me-1"></i>View Bill</button>` : ''}
             </div>
         </div>`;
 }

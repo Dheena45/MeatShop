@@ -16,6 +16,7 @@ public class ProductDetailDTO {
     private BigDecimal effectivePrice;
     private Integer stockQuantity;
     private Integer minOrderQty;
+    private String unit = "KG";
     private String imageUrl;
     private boolean available;
     private boolean freshToday;

@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Delivery Boys — FreshMeat Admin</title>
+    <link rel="icon" type="image/png" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🥩</text></svg>">
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.3/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+    <link rel="stylesheet" href="/admin/css/admin.css">
+</head>
+<body>
+
+<div id="admin-shell"></div>
+
+<!-- Add / Edit Delivery Boy -->
+<div class="modal fade" id="boyModal" tabindex="-1" aria-labelledby="boyModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="boyModalLabel"><i class="fa-solid fa-id-badge text-primary me-2"></i>Add Delivery Boy</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <form id="boy-form" novalidate>
+          <div class="mb-3">
+            <label class="form-label" for="b-name">Full Name</label>
+            <input type="text" class="form-control form-control-fm" id="b-name" maxlength="100" placeholder="e.g. Ravi Kumar">
+            <div class="invalid-feedback" id="err-name">Name is required.</div>
+          </div>
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label class="form-label" for="b-email">Email</label>
+              <input type="email" class="form-control form-control-fm" id="b-email" maxlength="150" placeholder="ravi@freshmeat.com">
+              <div class="invalid-feedback" id="err-email">Enter a valid email address.</div>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label" for="b-phone">Mobile Number</label>
+              <input type="tel" class="form-control form-control-fm" id="b-phone" maxlength="10" inputmode="numeric" placeholder="9876543210">
+              <div class="invalid-feedback" id="err-phone">Enter a valid 10-digit mobile number.</div>
+            </div>
+          </div>
+          <div class="mt-3">
+            <label class="form-label" for="b-password">Password <span class="text-muted" id="pw-hint" style="text-transform:none;letter-spacing:0;"></span></label>
+            <input type="password" class="form-control form-control-fm" id="b-password" maxlength="100" placeholder="Minimum 6 characters">
+            <div class="invalid-feedback" id="err-password">Password must be at least 6 characters.</div>
+            <div class="form-text text-muted" style="font-size:0.75rem;">Stored BCrypt-hashed. Used to sign in on the Delivery Boy dashboard.</div>
+          </div>
+          <div class="form-check form-switch mt-3" id="b-active-wrap">
+            <input class="form-check-input" type="checkbox" id="b-active" checked>
+            <label class="form-check-label" for="b-active" style="font-size:0.85rem;">Active — can be assigned deliveries and sign in</label>
+          </div>
+        </form>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn-admin-outline" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn-admin" id="boy-save-btn">Save</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Activate / Deactivate confirmation -->
+<div class="modal fade" id="toggleModal" tabindex="-1" aria-labelledby="toggleModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="toggleModalLabel"></h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <p class="mb-0" id="toggle-msg"></p>
+        <div class="mt-3 p-3 rounded" style="background:#f8f9fa;">
+          <div class="fw-semibold" id="toggle-name"></div>
+          <div class="text-muted small" id="toggle-meta"></div>
+        </div>
+        <p class="text-muted small mt-3 mb-0" id="toggle-note"></p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn-admin-outline" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn-admin" id="toggle-confirm-btn"></button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.3/js/bootstrap.bundle.min.js"></script>
+<script src="/js/app.js"></script>
+<script src="/admin/js/admin-app.js"></script>
+<script src="/admin/js/delivery-boys.js"></script>
+</body>
+</html>

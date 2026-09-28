@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Categories — FreshMeat Admin</title>
+    <link rel="icon" type="image/png" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🥩</text></svg>">
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.3/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+    <link rel="stylesheet" href="/admin/css/admin.css">
+</head>
+<body>
+
+<div id="admin-shell"></div>
+
+<!-- Add/Edit category modal -->
+<div class="modal fade" id="categoryModal" tabindex="-1" aria-labelledby="categoryModalLabel">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="categoryModalLabel">Add Category</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div class="mb-3">
+          <label class="form-label">Category Name *</label>
+          <input type="text" class="form-control form-control-fm" id="cat-name" maxlength="100" placeholder="e.g. Chicken">
+        </div>
+        <div class="mb-3">
+          <label class="form-label">Description</label>
+          <textarea class="form-control form-control-fm" id="cat-desc" rows="2" maxlength="300" placeholder="Short description of this category"></textarea>
+        </div>
+        <div class="form-check">
+          <input class="form-check-input" type="checkbox" id="cat-active" checked>
+          <label class="form-check-label small" for="cat-active">Active / Available</label>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-admin-outline" data-bs-dismiss="modal">Cancel</button>
+        <button class="btn-admin" id="save-category-btn">Save Category</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Delete category confirmation modal -->
+<div class="modal fade" id="deleteCategoryModal" tabindex="-1" aria-labelledby="deleteCategoryModalLabel">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="deleteCategoryModalLabel"><i class="fa-solid fa-triangle-exclamation text-danger me-2"></i>Delete Category</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <p class="mb-2">Are you sure you want to delete "<strong><span id="delete-category-name">this category</span></strong>"?</p>
+        <p class="text-muted small mb-0" style="font-size:0.8rem;">This action cannot be undone.</p>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-admin-outline" data-bs-dismiss="modal">Keep Category</button>
+        <button class="btn-admin" id="delete-category-confirm-btn" style="background:var(--danger);border-color:var(--danger);">Delete Category</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.3/js/bootstrap.bundle.min.js"></script>
+<script src="/js/app.js"></script>
+<script src="/admin/js/admin-app.js"></script>
+<script src="/admin/js/categories.js"></script>
+</body>
+</html>

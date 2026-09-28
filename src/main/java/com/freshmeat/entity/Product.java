@@ -47,6 +47,9 @@ public class Product {
     @Column(name = "min_order_qty", nullable = false)
     private Integer minOrderQty = 1;
 
+    @Column(length = 20)
+    private String unit = "KG";
+
     @Column(name = "image_url", length = 500)
     private String imageUrl;
 
@@ -70,9 +73,6 @@ public class Product {
     @CollectionTable(name = "product_cutting_options", joinColumns = @JoinColumn(name = "product_id"))
     @Column(name = "cutting_option")
     private List<String> cuttingOptions = new ArrayList<>();
-
-    @OneToMany(mappedBy = "product", fetch = FetchType.LAZY, cascade = CascadeType.ALL, orphanRemoval = true)
-    private List<Review> reviews = new ArrayList<>();
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;

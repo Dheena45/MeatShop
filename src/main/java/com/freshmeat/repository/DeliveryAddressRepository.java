@@ -8,4 +8,6 @@ import java.util.List;
 public interface DeliveryAddressRepository extends JpaRepository<DeliveryAddress, Long> {
 
     List<DeliveryAddress> findByUserIdOrderByIsDefaultDescCreatedAtDesc(Long userId);
+
+    void deleteByUserId(Long userId);
 }

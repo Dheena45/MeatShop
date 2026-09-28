@@ -1,5 +1,20 @@
 /* FreshMeat — Checkout controller */
 
+const WEEKDAY_DELIVERY_SLOTS = [
+    '6 AM - 8 AM',
+    '8 AM - 10 AM',
+    '10 AM - 12 PM'
+];
+
+const WEEKEND_DELIVERY_SLOTS = [
+    '6 AM - 8 AM',
+    '8 AM - 10 AM',
+    '10 AM - 12 PM',
+    '12 PM - 2 PM',
+    '4 PM - 6 PM',
+    '6 PM - 8 PM'
+];
+
 let selectedSlot = null;
 let selectedPay = 'CASH_ON_DELIVERY';
 let cartData = null;
@@ -8,14 +23,33 @@ document.addEventListener('DOMContentLoaded', function () {
     if (!Auth.requireLogin()) return;
     loadCart();
     hydrateUserInfo();
+    renderDeliverySlots();
 
-    document.querySelectorAll('.slot-option').forEach(el => {
-        el.addEventListener('click', () => selectSlot(el));
-    });
     document.querySelectorAll('.pay-option').forEach(el => {
         el.addEventListener('click', () => selectPay(el));
     });
 });
+
+function deliverySlotsForDay(day) {
+    return (day === 0 || day === 6) ? WEEKEND_DELIVERY_SLOTS : WEEKDAY_DELIVERY_SLOTS;
+}
+
+function slotLabel(slot) {
+    return slot.replace(/ - /g, ' \u2013 ');
+}
+
+function renderDeliverySlots() {
+    const container = document.getElementById('delivery-slots');
+    if (!container) return;
+    const today = new Date();
+    const slots = deliverySlotsForDay(today.getDay());
+    container.innerHTML = slots.map(slot => `
+        <div class="col-6 col-md-4"><div class="slot-option" data-slot="${slot}">${slotLabel(slot)}</div></div>
+    `).join('');
+    document.querySelectorAll('.slot-option').forEach(el => {
+        el.addEventListener('click', () => selectSlot(el));
+    });
+}
 
 function hydrateUserInfo() {
     const user = Auth.getUser();
@@ -79,6 +113,18 @@ function selectPay(el) {
     document.querySelectorAll('.pay-option').forEach(o => o.classList.remove('selected'));
     el.classList.add('selected');
     selectedPay = el.dataset.pay;
+
+    const isOnline = selectedPay === 'ONLINE';
+    const icon = document.getElementById('co-pay-note-icon');
+    const text = document.getElementById('co-pay-note-text');
+    if (icon) {
+        icon.className = isOnline
+            ? 'fa-solid fa-mobile-screen-button me-1'
+            : 'fa-solid fa-hand-holding-dollar me-1';
+    }
+    if (text) {
+        text.textContent = isOnline ? 'UPI / Online Payment' : 'Cash on Delivery';
+    }
 }
 
 async function loadSavedAddresses() {
@@ -157,11 +203,24 @@ function placeOrder() {
     apiCall('/api/orders', { method: 'POST', body: payload })
         .then(res => {
             updateCartCount();
-            showToast('Order placed successfully!');
-            const orderNumber = res.data ? res.data.orderNumber : '';
-            setTimeout(() => {
-                window.location.href = '/order-tracking.html?id=' + res.data.id + (orderNumber ? '&no=' + encodeURIComponent(orderNumber) : '');
-            }, 900);
+            const order = res.data || {};
+            const orderNumber = order.orderNumber || '';
+
+            if (selectedPay === 'ONLINE') {
+                // The order is created but NOT confirmed — it stays in PLACED
+                // (payment PENDING) until the customer completes the UPI payment.
+                showToast('Order placed. Complete the UPI payment to confirm it.', 'info', { title: 'Payment Required' });
+                setTimeout(() => {
+                    window.location.href = '/payment.html?order=' + order.id +
+                        (orderNumber ? '&no=' + encodeURIComponent(orderNumber) : '');
+                }, 900);
+            } else {
+                showToast('Your order has been confirmed successfully.', 'success', { title: 'Order Confirmed' });
+                setTimeout(() => {
+                    window.location.href = '/order-tracking.html?id=' + order.id +
+                        (orderNumber ? '&no=' + encodeURIComponent(orderNumber) : '');
+                }, 900);
+            }
 
             // save address if requested
             if (document.getElementById('co-save-address') && document.getElementById('co-save-address').checked) {

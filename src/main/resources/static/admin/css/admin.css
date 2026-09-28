@@ -144,9 +144,13 @@ a { text-decoration: none; color: inherit; }
     display: flex;
     align-items: center;
     gap: 1rem;
-    transition: transform .2s;
+    transition: transform .2s, box-shadow .2s;
 }
 .stat-card:hover { transform: translateY(-3px); }
+.stat-card.clickable { cursor: pointer; }
+.stat-card.clickable:hover { transform: translateY(-3px); box-shadow: var(--shadow-hover, 0 14px 30px rgba(0,0,0,0.14)); }
+.stat-card.clickable .stat-meta h6 { display: flex; align-items: center; gap: 6px; }
+.stat-card.clickable .stat-meta h6::after { content: "\f054"; font-family: "Font Awesome 6 Free"; font-weight: 900; font-size: 0.58rem; color: var(--gold); }
 .stat-icon {
     width: 52px; height: 52px;
     border-radius: 13px;
@@ -217,8 +221,9 @@ a { text-decoration: none; color: inherit; }
 
 /* Badges */
 .badge-status { font-size: 0.7rem; font-weight: 600; padding: 4px 10px; border-radius: 50px; text-transform: uppercase; letter-spacing: 0.3px; white-space: nowrap; }
-.badge-status.PLACED { background: #e8f0fe; color: #1a56db; }
+.badge-status.PLACED { background: #fff4e0; color: #b45309; }
 .badge-status.CONFIRMED { background: #e7f6ec; color: var(--success); }
+.badge-status.READY_FOR_PICKUP { background: #e8f0fe; color: #1a56db; }
 .badge-status.PREPARING { background: #fff4e0; color: #b45309; }
 .badge-status.OUT_FOR_DELIVERY { background: #f3e8ff; color: #7c3aed; }
 .badge-status.DELIVERED { background: #d1fae5; color: #047857; }
@@ -226,7 +231,32 @@ a { text-decoration: none; color: inherit; }
 .badge-status.IN_STOCK { background: #d1fae5; color: #047857; }
 .badge-status.LOW_STOCK { background: #fff4e0; color: #b45309; }
 .badge-status.OUT_OF_STOCK { background: #fee2e2; color: #b91c1c; }
+.badge-status.APPROVED { background: #d1fae5; color: #047857; }
+.badge-status.REJECTED { background: #fee2e2; color: #b91c1c; }
+.badge-status.PENDING { background: #fff4e0; color: #b45309; }
+.badge-status.NEW { background: #fff4e0; color: #b45309; }
+.badge-status.READ { background: #e8f0fe; color: #1a56db; }
+.badge-status.ACTIVE { background: #d1fae5; color: #047857; }
+.badge-status.INACTIVE { background: #e5e7eb; color: #6b7280; }
+.badge-status.RESOLVED { background: #d1fae5; color: #047857; }
+.badge-status.PENDING_ASSIGNMENT { background: #fff4e0; color: #b45309; }
+.badge-status.ASSIGNED { background: #e8f0fe; color: #1a56db; }
 .badge-toogle { background: #e8f0fe; color: #1a56db; }
+
+.modal-status-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    border: 1px solid #eee;
+    border-radius: 10px;
+    padding: 0.6rem 0.9rem;
+    background: #fff;
+    cursor: pointer;
+    transition: all .15s;
+    text-align: left;
+}
+.modal-status-row:hover { background: #f8f5f0; border-color: var(--gold); transform: translateX(2px); }
 
 /* Buttons */
 .btn-admin {
@@ -345,3 +375,112 @@ a { text-decoration: none; color: inherit; }
 /* Empty */
 .empty-box { text-align: center; padding: 2.5rem; color: var(--muted); }
 .empty-box i { font-size: 2.2rem; margin-bottom: 0.5rem; color: var(--border); }
+
+/* ============ TOASTS ============ */
+#toast-container {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    z-index: 2000;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 10px;
+    max-width: 380px;
+}
+.fm-toast {
+    background: var(--card);
+    border-radius: 12px;
+    border: 1px solid var(--border);
+    border-left: 5px solid var(--success);
+    box-shadow: 0 8px 24px rgba(0,0,0,0.16);
+    padding: 0.9rem 1.1rem;
+    font-size: 0.85rem;
+    color: var(--text);
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    animation: toastIn .3s ease;
+}
+.fm-toast > i { margin-top: 2px; }
+.fm-toast.success > i { color: var(--success); }
+.fm-toast.error { border-left-color: var(--danger); }
+.fm-toast.error > i { color: var(--danger); }
+.fm-toast.warning { border-left-color: var(--warning); }
+.fm-toast.warning > i { color: var(--warning); }
+.fm-toast.info { border-left-color: #0dcaf0; }
+.fm-toast.info > i { color: #0dcaf0; }
+.fm-toast-body { flex: 1; min-width: 0; }
+.fm-toast-title {
+    display: block;
+    font-size: 0.9rem;
+    font-weight: 600;
+    margin-bottom: 2px;
+    color: var(--text);
+}
+.fm-toast-body span {
+    display: block;
+    color: var(--muted);
+    line-height: 1.45;
+}
+@keyframes toastIn { from { opacity: 0; transform: translateX(30px); } to { opacity: 1; transform: translateX(0); } }
+
+/* ============================================================
+   Invoice modal + 80mm thermal receipt print
+   ============================================================ */
+.invoice-modal-sheet {
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 13px;
+    line-height: 1.55;
+    color: #111;
+    background: #fff;
+}
+.invoice-modal-sheet .rce-brand {
+    text-align: center; font-size: 20px; font-weight: 700; letter-spacing: 1px; color: var(--primary);
+}
+.invoice-modal-sheet .rce-sub { text-align: center; font-size: 11px; color: #555; }
+.rce-sep { border-top: 1px dashed #999; margin: 9px 0; }
+.rce-meta .rce-kv, .rce-pay .rce-kv, .rce-totals .rce-kv {
+    display: flex; justify-content: space-between; gap: 12px; font-size: 12.5px; padding: 1px 0;
+}
+.rce-customer .rce-kv {
+    display: flex; justify-content: space-between; gap: 12px; font-size: 12.5px; padding: 1px 0;
+}
+.rce-items .rce-item {
+    display: flex; justify-content: space-between; gap: 8px; font-size: 12.5px; padding: 1px 0;
+}
+.rce-items .rce-item .rce-name { flex: 1 1 auto; text-align: left; }
+.rce-items .rce-item .rce-cutting { display: block; font-size: 11px; color: #666; }
+.rce-items .rce-item .rce-qty, .rce-items .rce-item .rce-amt { white-space: nowrap; }
+.rce-total { font-size: 16px; font-weight: 700; }
+.rce-notes { margin-top: 8px; font-size: 11.5px; color: #444; white-space: pre-line; }
+.rce-foot { text-align: center; margin-top: 10px; }
+.rce-foot .rce-thanks { font-weight: 700; }
+.rce-foot .rce-helpline { font-size: 11px; color: #555; white-space: pre-line; }
+
+#receipt-print {
+    position: absolute;
+    left: -9999px;
+    top: 0;
+    width: 80mm;
+    max-width: 80mm;
+    background: #fff;
+    color: #000;
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 12px;
+    line-height: 1.5;
+}
+
+@media print {
+    @page { size: 80mm auto; margin: 0; }
+    body * { visibility: hidden !important; }
+    #receipt-print, #receipt-print * { visibility: visible !important; }
+    #receipt-print {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 80mm;
+        max-width: 80mm;
+    }
+    .no-print { display: none !important; }
+}

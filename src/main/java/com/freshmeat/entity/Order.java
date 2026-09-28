@@ -33,7 +33,7 @@ public class Order {
     private String orderNumber;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "user_id", nullable = false)
+    @JoinColumn(name = "user_id", nullable = true)
     private User user;
 
     @Column(name = "subtotal", nullable = false, precision = 12, scale = 2)
@@ -56,7 +56,7 @@ public class Order {
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 30)
-    private OrderStatus status = OrderStatus.PLACED;
+    private OrderStatus status = OrderStatus.CONFIRMED;
 
     @Column(name = "delivery_door", length = 50)
     private String deliveryDoor;
@@ -90,6 +90,14 @@ public class Order {
 
     @OneToOne(mappedBy = "order", cascade = CascadeType.ALL, fetch = FetchType.LAZY, orphanRemoval = true)
     private Payment payment;
+
+    /**
+     * Append-only delivery trail. No cascade and no orphan removal: assignment
+     * rows are business history and must survive untouched, so the owning
+     * side (DeliveryAssignment) is the only place rows are ever written.
+     */
+    @OneToMany(mappedBy = "order", fetch = FetchType.LAZY)
+    private List<DeliveryAssignment> deliveryAssignments = new ArrayList<>();
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;

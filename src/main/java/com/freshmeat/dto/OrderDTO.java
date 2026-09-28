@@ -29,7 +29,16 @@ public class OrderDTO {
     private String notes;
     private String paymentMethod;
     private String paymentStatus;
+    private BigDecimal paidAmount;
+    private LocalDateTime paidAt;
+    private String transactionRef;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
     private List<OrderLineDTO> items = new ArrayList<>();
+    /**
+     * Delivery information (assignment, timestamps, delivery boy). Populated for
+     * admin responses and for the delivery boy who owns the order; always null
+     * for customer responses so internal delivery data is not exposed.
+     */
+    private DeliveryInfoDTO delivery;
 }

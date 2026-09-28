@@ -22,13 +22,12 @@
                 <span class="hero-badge"><i class="fa-solid fa-leaf"></i> 100% Fresh • Hygienically Processed</span>
                 <h1 class="hero-title">Fresh Meat, Delivered to <span class="accent">Your Door</span>.</h1>
                 <p class="hero-sub">Premium quality meat, hygienically prepared and delivered fresh to your doorstep. Choose your cut, pick your slot, we take care of the rest.</p>
-                <div class="d-flex gap-3 flex-wrap mt-4">
+                <div class="mt-4">
                     <a href="/shop.html" class="btn btn-fm-gold btn-fm-lg">Shop Now <i class="fa-solid fa-arrow-right ms-1"></i></a>
-                    <a href="#categories" class="btn btn-fm-outline-light btn-fm-lg">Explore Categories</a>
                 </div>
                 <div class="hero-stats">
-                    <div class="hero-stat"><h3>500+</h3><span>Premium Cuts</span></div>
-                    <div class="hero-stat"><h3>10K+</h3><span>Happy Customers</span></div>
+                    <div class="hero-stat"><h3 id="stat-premium-cuts"></h3><span>Premium Cuts</span></div>
+                    <div class="hero-stat"><h3 id="stat-happy-customers"></h3><span>Happy Customers</span></div>
                     <div class="hero-stat"><h3>45 min</h3><span>Avg. Delivery</span></div>
                 </div>
             </div>
@@ -56,72 +55,6 @@
         </div>
     </div>
 </section>
-
-<!-- CATEGORIES -->
-<!-- <section class="section-pad" id="categories">
-    <div class="container">
-        <div class="section-title-wrap">
-            <span class="section-eyebrow">Shop by Category</span>
-            <h2 class="section-title">Fresh Across Every Category</h2>
-            <p class="section-sub">From everyday essentials to festive specialties, explore our full range of premium cuts.</p>
-        </div>
-        <div id="categories-grid" class="row g-3">
-            <div class="col-12 text-center"><div class="loader-spinner"></div></div>
-        </div>
-    </div>
-</section> -->
-
-<!-- BEST SELLERS -->
-<!-- <section class="section-pad section-alt" id="best-sellers">
-    <div class="container">
-        <div class="d-flex flex-wrap justify-content-between align-items-end mb-4">
-            <div>
-                <span class="section-eyebrow">Customer Favourites</span>
-                <h2 class="section-title mb-0">Best Sellers</h2>
-            </div>
-            <a href="/shop.html" class="btn btn-fm-outline">View All Products</a>
-        </div>
-        <div id="bestsellers-grid" class="row g-3">
-            <div class="col-12 text-center"><div class="loader-spinner"></div></div>
-        </div>
-    </div>
-</section> -->
-
-<!-- TODAY'S OFFERS -->
-<!-- <section class="section-pad" id="offers-section">
-    <div class="container">
-        <div class="section-title-wrap">
-            <span class="section-eyebrow">Limited Time</span>
-            <h2 class="section-title">Today's Offers</h2>
-            <p class="section-sub">Grab the best deals of the week before they're gone.</p>
-        </div>
-        <div class="offer-banner mb-4">
-            <div class="offer-tag">UP TO<br>20% OFF</div>
-            <span class="hero-badge"><i class="fa-solid fa-bolt"></i> Weekend Special</span>
-            <h2 class="mt-3">Weekend Meat Fest</h2>
-            <p class="offer-sub mb-3">Up to 20% OFF on selected products. Free delivery on orders above ₹499.</p>
-            <span class="offer-code">CODE: FRESH20</span> &nbsp;
-            <a href="/shop.html" class="btn btn-fm-gold btn-fm-lg mt-3">Shop the Deal</a>
-        </div>
-        <div id="offers-products" class="row g-3">
-            <div class="col-12 text-center"><div class="loader-spinner"></div></div>
-        </div>
-    </div>
-</section> -->
-
-<!-- POPULAR NEAR YOU -->
-<!-- <section class="section-pad section-alt" id="popular-section">
-    <div class="container">
-        <div class="section-title-wrap">
-            <span class="section-eyebrow">Local Favourites</span>
-            <h2 class="section-title">Popular Near You</h2>
-            <p class="section-sub">The most-ordered products by customers in your area.</p>
-        </div>
-        <div id="popular-grid" class="row g-3">
-            <div class="col-12 text-center"><div class="loader-spinner"></div></div>
-        </div>
-    </div>
-</section> -->
 
 <!-- WHY CHOOSE US -->
 <section class="section-pad">
@@ -213,14 +146,10 @@
                     <h4 style="font-family:var(--font-body);font-weight:600;">Get in Touch</h4>
                     <p class="text-muted small">Questions about an order or a custom cut? Write to us.</p>
                     <div class="mb-3">
-                        <label class="form-label fw-semibold small">Your Email</label>
-                        <input type="email" class="form-control form-control-fm" id="contact-email" placeholder="you@example.com">
-                    </div>
-                    <div class="mb-3">
                         <label class="form-label fw-semibold small">Message</label>
                         <textarea class="form-control form-control-fm" id="contact-msg" rows="3" placeholder="How can we help?"></textarea>
                     </div>
-                    <button class="btn btn-fm" onclick="showToast('Thanks! We will get back to you soon.', 'info')">Send Message</button>
+                    <button class="btn btn-fm" id="contact-send-btn">Send Message</button>
                 </div>
             </div>
         </div>

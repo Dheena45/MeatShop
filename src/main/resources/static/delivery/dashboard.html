@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="theme-color" content="#8B1E1E">
+    <title>My Deliveries — FreshMeat</title>
+    <link rel="icon" type="image/png" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🥩</text></svg>">
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.3/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+    <link rel="stylesheet" href="/delivery/css/delivery.css">
+</head>
+<body>
+
+<header class="db-header">
+    <div class="db-header-inner">
+        <div class="db-brand">
+            <span class="db-logo">🥩</span>
+            <div>
+                <strong>FreshMeat</strong>
+                <small>Delivery Partner</small>
+            </div>
+        </div>
+        <div class="db-header-right">
+            <span class="db-user" id="db-user-name"></span>
+            <button class="db-icon-btn" id="logout-btn" title="Logout" aria-label="Logout">
+                <i class="fa-solid fa-right-from-bracket"></i>
+            </button>
+        </div>
+    </div>
+</header>
+
+<main class="db-main">
+
+    <div class="db-hello">
+        <h1 id="db-greeting">My Deliveries</h1>
+        <p class="db-date" id="db-date"></p>
+    </div>
+
+    <div class="db-stats" id="db-stats"></div>
+
+    <div class="db-toolbar">
+        <div class="db-search">
+            <i class="fa-solid fa-magnifying-glass"></i>
+            <input type="search" id="db-search" placeholder="Search order, name or phone" autocomplete="off">
+        </div>
+        <button class="db-icon-btn" id="db-refresh" title="Refresh" aria-label="Refresh">
+            <i class="fa-solid fa-rotate"></i>
+        </button>
+    </div>
+
+    <div class="db-tabs" role="tablist">
+        <button class="db-tab active" data-state="">All</button>
+        <button class="db-tab" data-state="ASSIGNED">To Pick Up</button>
+        <button class="db-tab" data-state="OUT_FOR_DELIVERY">On The Way</button>
+        <button class="db-tab" data-state="DELIVERED">Delivered</button>
+    </div>
+
+    <div id="db-list" class="db-list"></div>
+
+</main>
+
+<!-- Delivery detail sheet -->
+<div class="db-sheet-backdrop" id="sheet-backdrop" hidden></div>
+<div class="db-sheet" id="detail-sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-title" hidden>
+    <div class="db-sheet-handle"></div>
+    <div class="db-sheet-head">
+        <div>
+            <h2 id="sheet-title">Delivery</h2>
+            <p id="sheet-sub"></p>
+        </div>
+        <button class="db-icon-btn" id="sheet-close" aria-label="Close">
+            <i class="fa-solid fa-xmark"></i>
+        </button>
+    </div>
+    <div class="db-sheet-body" id="sheet-body"></div>
+</div>
+
+<div class="db-toast" id="db-toast" role="status" aria-live="polite" hidden></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.3/js/bootstrap.bundle.min.js"></script>
+<script src="/js/app.js"></script>
+<script src="/delivery/js/dashboard.js"></script>
+</body>
+</html>

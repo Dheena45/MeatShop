@@ -2,6 +2,7 @@ package com.freshmeat.controller.admin;
 
 import com.freshmeat.dto.ProductDTO;
 import com.freshmeat.exception.ApiResponse;
+import com.freshmeat.exception.BadRequestException;
 import com.freshmeat.service.FileStorageService;
 import com.freshmeat.service.ProductService;
 import lombok.Data;
@@ -29,7 +30,7 @@ public class AdminProductController {
     @GetMapping
     public ResponseEntity<ApiResponse<List<ProductDTO>>> getAllProducts(
             @RequestParam(required = false) String search) {
-        List<ProductDTO> all = productService.searchProducts(
+        List<ProductDTO> all = productService.searchAdminProducts(
                         search == null ? "" : search, null, null, null, null, null, "newest", 0, 1000)
                 .getContent();
         return ResponseEntity.ok(ApiResponse.ok(all));
@@ -44,14 +45,17 @@ public class AdminProductController {
             @RequestParam(value = "discountPercent", defaultValue = "0") BigDecimal discountPercent,
             @RequestParam("stockQuantity") Integer stockQuantity,
             @RequestParam(value = "minOrderQty", defaultValue = "1") Integer minOrderQty,
+            @RequestParam(value = "unit", defaultValue = "KG") String unit,
             @RequestParam(value = "available", defaultValue = "true") boolean available,
             @RequestParam(value = "freshToday", defaultValue = "true") boolean freshToday,
             @RequestParam("categoryId") Long categoryId,
             @RequestParam(value = "cuttingOptions", required = false) String cuttingOptions,
             @RequestParam(value = "image", required = false) MultipartFile image) {
 
+        validateProduct(name, categoryId, pricePerKg, discountPercent, stockQuantity);
+
         ProductDTO dto = buildDTO(name, shortDescription, description, pricePerKg, discountPercent,
-                stockQuantity, minOrderQty, available, freshToday, categoryId, cuttingOptions, null);
+                stockQuantity, minOrderQty, unit, available, freshToday, categoryId, cuttingOptions, null);
 
         if (image != null && !image.isEmpty()) {
             dto.setImageUrl(fileStorageService.storeImage(image));
@@ -74,15 +78,18 @@ public class AdminProductController {
             @RequestParam(value = "discountPercent", defaultValue = "0") BigDecimal discountPercent,
             @RequestParam("stockQuantity") Integer stockQuantity,
             @RequestParam(value = "minOrderQty", defaultValue = "1") Integer minOrderQty,
+            @RequestParam(value = "unit", defaultValue = "KG") String unit,
             @RequestParam(value = "available", defaultValue = "true") boolean available,
             @RequestParam(value = "freshToday", defaultValue = "true") boolean freshToday,
             @RequestParam("categoryId") Long categoryId,
             @RequestParam(value = "cuttingOptions", required = false) String cuttingOptions,
             @RequestParam(value = "image", required = false) MultipartFile image) {
 
+        validateProduct(name, categoryId, pricePerKg, discountPercent, stockQuantity);
+
         ProductDTO existing = productService.getAdminProduct(id);
         ProductDTO dto = buildDTO(name, shortDescription, description, pricePerKg, discountPercent,
-                stockQuantity, minOrderQty, available, freshToday, categoryId, cuttingOptions,
+                stockQuantity, minOrderQty, unit, available, freshToday, categoryId, cuttingOptions,
                 existing.getImageUrl());
 
         // Replace image only when a new one is provided
@@ -123,7 +130,7 @@ public class AdminProductController {
 
     private ProductDTO buildDTO(String name, String shortDescription, String description,
                                 BigDecimal pricePerKg, BigDecimal discountPercent,
-                                Integer stockQuantity, Integer minOrderQty,
+                                Integer stockQuantity, Integer minOrderQty, String unit,
                                 boolean available, boolean freshToday, Long categoryId,
                                 String cuttingOptions, String existingImageUrl) {
         ProductDTO dto = new ProductDTO();
@@ -134,6 +141,7 @@ public class AdminProductController {
         dto.setDiscountPercent(discountPercent == null ? BigDecimal.ZERO : discountPercent);
         dto.setStockQuantity(stockQuantity);
         dto.setMinOrderQty(minOrderQty == null ? 1 : minOrderQty);
+        dto.setUnit(unit == null || unit.isBlank() ? "KG" : unit.trim().toUpperCase());
         dto.setAvailable(available);
         dto.setFreshToday(freshToday);
         dto.setCategoryId(categoryId);
@@ -147,6 +155,26 @@ public class AdminProductController {
             dto.setCuttingOptions(options);
         }
         return dto;
+    }
+
+    private void validateProduct(String name, Long categoryId, BigDecimal pricePerKg,
+                                 BigDecimal discountPercent, Integer stockQuantity) {
+        if (name == null || name.isBlank()) {
+            throw new BadRequestException("Product name is required");
+        }
+        if (categoryId == null) {
+            throw new BadRequestException("Please select a category");
+        }
+        if (pricePerKg == null || pricePerKg.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new BadRequestException("Price must be greater than 0");
+        }
+        if (stockQuantity == null || stockQuantity < 0) {
+            throw new BadRequestException("Stock cannot be negative");
+        }
+        if (discountPercent != null &&
+                (discountPercent.compareTo(BigDecimal.ZERO) < 0 || discountPercent.compareTo(BigDecimal.valueOf(100)) > 0)) {
+            throw new BadRequestException("Discount must be between 0 and 100");
+        }
     }
 }
 

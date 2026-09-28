@@ -10,6 +10,8 @@ import com.freshmeat.exception.ResourceNotFoundException;
 import com.freshmeat.repository.DeliveryAddressRepository;
 import com.freshmeat.service.AuthService;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Pattern;
 import lombok.Data;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
@@ -34,7 +36,7 @@ public class ProfileController {
     }
 
     @PutMapping("/profile")
-    public ResponseEntity<ApiResponse<UserDTO>> updateProfile(@RequestBody UpdateProfileRequest request) {
+    public ResponseEntity<ApiResponse<UserDTO>> updateProfile(@Valid @RequestBody UpdateProfileRequest request) {
         return ResponseEntity.ok(ApiResponse.ok("Profile updated",
                 authService.updateProfile(request.getName(), request.getPhone())));
     }
@@ -136,5 +138,8 @@ public class ProfileController {
 @Data
 class UpdateProfileRequest {
     private String name;
+
+    @NotBlank(message = "Mobile number is required")
+    @Pattern(regexp = "^[6-9][0-9]{9}$", message = "Enter a valid 10-digit mobile number starting with 6, 7, 8, or 9.")
     private String phone;
 }
