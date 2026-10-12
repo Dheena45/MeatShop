@@ -30,6 +30,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.Collections;
@@ -86,6 +87,18 @@ public class DeliveryService {
     private static final Set<DeliveryAssignmentStatus> TODAY_STATUSES =
             Collections.unmodifiableSet(EnumSet.of(DeliveryAssignmentStatus.ASSIGNED,
                     DeliveryAssignmentStatus.STARTED, DeliveryAssignmentStatus.COMPLETED));
+
+    /**
+     * The existing weekday/weekend delivery-slot rules, mirrored from checkout.js
+     * so the admin's assignment is validated against the same list the customer
+     * picked from. Monday-Friday use the short list, Saturday/Sunday the full one.
+     */
+    private static final Set<String> WEEKDAY_SLOTS = Set.of(
+            "6 AM - 8 AM", "8 AM - 10 AM", "10 AM - 12 PM");
+
+    private static final Set<String> WEEKEND_SLOTS = Set.of(
+            "6 AM - 8 AM", "8 AM - 10 AM", "10 AM - 12 PM",
+            "12 PM - 2 PM", "4 PM - 6 PM", "6 PM - 8 PM");
 
     @Autowired
     private OrderRepository orderRepository;
@@ -253,12 +266,14 @@ public class DeliveryService {
         for (Order order : all) {
             DeliveryState state = deliveryInfoMapper.stateOf(order, assigned.contains(order.getId()));
             if (state == null) continue;
-            switch (state) {
-                case PENDING_ASSIGNMENT -> summary.setPendingAssignment(summary.getPendingAssignment() + 1);
-                case ASSIGNED -> summary.setAssigned(summary.getAssigned() + 1);
-                case OUT_FOR_DELIVERY -> summary.setOutForDelivery(summary.getOutForDelivery() + 1);
-                case DELIVERED -> summary.setDelivered(summary.getDelivered() + 1);
-                default -> { }
+            if (state == DeliveryState.PENDING_ASSIGNMENT) {
+                summary.setPendingAssignment(summary.getPendingAssignment() + 1);
+            } else if (state == DeliveryState.ASSIGNED) {
+                summary.setAssigned(summary.getAssigned() + 1);
+            } else if (state == DeliveryState.OUT_FOR_DELIVERY) {
+                summary.setOutForDelivery(summary.getOutForDelivery() + 1);
+            } else if (state == DeliveryState.DELIVERED) {
+                summary.setDelivered(summary.getDelivered() + 1);
             }
         }
         return summary;
@@ -293,20 +308,27 @@ public class DeliveryService {
     }
 
     /**
-     * A PENDING_ASSIGNMENT order is one where the admin still has to confirm a
-     * Delivery Boy, so it can only be CONFIRMED or PREPARING. An ASSIGNED order
-     * is in the store with a boy already confirmed, which additionally includes
-     * READY_FOR_PICKUP — that is the order waiting for him to take it out.
+     * A PENDING_ASSIGNMENT order is one where the admin still has to assign a
+     * Delivery Boy. An ASSIGNED order holds a boy already assigned, including
+     * READY_FOR_PICKUP — that is the order waiting for him to confirm pickup.
      */
     private Set<OrderStatus> statusesFor(DeliveryState state) {
         if (state == null) return BOARD_STATUSES;
-        return switch (state) {
-            case PENDING_ASSIGNMENT -> DeliveryInfoMapper.ASSIGNABLE_STATUSES;
-            case ASSIGNED -> EnumSet.of(OrderStatus.CONFIRMED, OrderStatus.PREPARING,
-                    OrderStatus.READY_FOR_PICKUP);
-            case OUT_FOR_DELIVERY -> EnumSet.of(OrderStatus.OUT_FOR_DELIVERY);
-            case DELIVERED -> EnumSet.of(OrderStatus.DELIVERED);
-        };
+        // If/else rather than a switch expression: a switch over an enum is
+        // compiled through a synthetic switch-map class (DeliveryService$1), and
+        // a build that ships the outer class without that synthetic class breaks
+        // the delivery board with NoClassDefFoundError. Plain comparisons have
+        // no such hidden dependency.
+        if (state == DeliveryState.PENDING_ASSIGNMENT) {
+            return DeliveryInfoMapper.ASSIGNABLE_STATUSES;
+        }
+        if (state == DeliveryState.ASSIGNED) {
+            return EnumSet.of(OrderStatus.CONFIRMED, OrderStatus.PREPARING, OrderStatus.READY_FOR_PICKUP);
+        }
+        if (state == DeliveryState.OUT_FOR_DELIVERY) {
+            return EnumSet.of(OrderStatus.OUT_FOR_DELIVERY);
+        }
+        return EnumSet.of(OrderStatus.DELIVERED);
     }
 
     /* ================================================================
@@ -315,15 +337,16 @@ public class DeliveryService {
 
     @Transactional
     public OrderDTO assign(Long orderId, AssignDeliveryRequest request) {
-        return doAssign(orderId, request.getDeliveryBoyId(), false);
+        return doAssign(orderId, request, false);
     }
 
     @Transactional
     public OrderDTO reassign(Long orderId, AssignDeliveryRequest request) {
-        return doAssign(orderId, request.getDeliveryBoyId(), true);
+        return doAssign(orderId, request, true);
     }
 
-    private OrderDTO doAssign(Long orderId, Long deliveryBoyId, boolean isReassign) {
+    private OrderDTO doAssign(Long orderId, AssignDeliveryRequest request, boolean isReassign) {
+        Long deliveryBoyId = request.getDeliveryBoyId();
         if (deliveryBoyId == null) {
             throw new BadRequestException("Select a Delivery Boy");
         }
@@ -362,6 +385,17 @@ public class DeliveryService {
             }
         }
 
+        // The admin picks the delivery date + slot. On a reassign the previous
+        // values are carried over when the request omits them, so an operator can
+        // swap the delivery boy without silently losing the promised slot.
+        LocalDate deliveryDate = request.getDeliveryDate();
+        String deliverySlot = request.getDeliverySlot();
+        if (isReassign && open != null) {
+            if (deliveryDate == null) deliveryDate = open.getDeliveryDate();
+            if (deliverySlot == null || deliverySlot.isBlank()) deliverySlot = open.getDeliverySlot();
+        }
+        deliverySlot = validateDeliveryDateAndSlot(deliveryDate, deliverySlot);
+
         if (open != null) {
             // Close the previous row; it stays in the delivery history.
             open.setStatus(DeliveryAssignmentStatus.REASSIGNED);
@@ -373,6 +407,8 @@ public class DeliveryService {
         assignment.setDeliveryBoy(boy);
         assignment.setAssignedBy(admin);
         assignment.setStatus(DeliveryAssignmentStatus.ASSIGNED);
+        assignment.setDeliveryDate(deliveryDate);
+        assignment.setDeliverySlot(deliverySlot);
         assignment.setAssignedAt(LocalDateTime.now());
         deliveryAssignmentRepository.save(assignment);
 
@@ -480,12 +516,13 @@ public class DeliveryService {
             return enrichOne(order, boy);
         }
         if (order.getStatus() != OrderStatus.READY_FOR_PICKUP) {
-            throw new ConflictException("Delivery can only be started once the order is ready for pickup.");
+            throw new ConflictException("Pickup can only be confirmed once the order is ready for pickup.");
         }
 
         // Reuses the single existing status-transition rule set, so a delivery
-        // boy can never move an order to an arbitrary status.
-        orderService.updateOrderStatus(orderId, OrderStatus.OUT_FOR_DELIVERY);
+        // boy can never move an order to an arbitrary status. This is the
+        // delivery-boy-only path: the admin status endpoint rejects these targets.
+        orderService.applyDeliveryBoyStatusChange(orderId, OrderStatus.OUT_FOR_DELIVERY);
 
         markStarted(assignment);
         return enrichOne(order, boy);
@@ -511,17 +548,19 @@ public class DeliveryService {
             throw new ConflictException("Start the delivery before marking this order as delivered.");
         }
 
+        // Cash on delivery must be collected *before* the parcel is handed
+        // over: the separate "Collect cash" action flips the payment to PAID and
+        // only then is "Mark Delivered" allowed. Delivering never marks an
+        // unpaid COD order as PAID by itself — it simply refuses until the cash
+        // has been recorded. An online order is already PAID by the gateway.
         Payment payment = paymentService.getByOrder(order);
-        if (payment == null) {
-            throw new ConflictException("This order has no payment record.");
-        }
-        if (payment.getPaymentStatus() != PaymentStatus.PAID) {
+        if (payment != null && payment.getPaymentStatus() != PaymentStatus.PAID) {
             throw new ConflictException(payment.getPaymentMethod() == PaymentMethod.CASH_ON_DELIVERY
-                    ? "Cannot mark COD order as delivered until payment is received."
-                    : "Payment for this order is not completed yet.");
+                    ? "Please collect the cash payment before completing delivery."
+                    : "The payment for this order is not complete, so it cannot be delivered.");
         }
 
-        orderService.updateOrderStatus(orderId, OrderStatus.DELIVERED);
+        orderService.applyDeliveryBoyStatusChange(orderId, OrderStatus.DELIVERED);
 
         assignment.setCompletedAt(LocalDateTime.now());
         assignment.setStatus(DeliveryAssignmentStatus.COMPLETED);
@@ -535,7 +574,7 @@ public class DeliveryService {
      * stays OUT_FOR_DELIVERY until "Mark Delivered" is pressed separately.
      */
     @Transactional
-    public OrderDTO collectCash(Long orderId, String transactionRef) {
+    public OrderDTO collectCash(Long orderId, String transactionRef, BigDecimal collectedAmount) {
         User boy = requireCurrentDeliveryBoy();
         Order order = requireOrder(orderId);
         requireOwnedOpenAssignment(orderId, boy);
@@ -558,8 +597,29 @@ public class DeliveryService {
             throw new ConflictException("Payment for this order has already been marked as received.");
         }
 
-        // The collected amount is always the order grand total.
-        payment.setAmount(order.getGrandTotal());
+        // The collected amount must match the real outstanding amount. The
+        // amount is always taken from the order server side, never trusted from
+        // the client: an absent amount means "the full order total" (for older
+        // clients that never send one), and the payment model supports full
+        // collection only, so zero, negative, partial or excessive amounts are
+        // all rejected.
+        BigDecimal expected = order.getGrandTotal();
+        if (collectedAmount == null) {
+            collectedAmount = expected;
+        }
+        if (collectedAmount.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new ConflictException("Enter a positive cash amount before submitting the collection.");
+        }
+        if (collectedAmount.compareTo(expected) < 0) {
+            throw new ConflictException("The collected amount of " + collectedAmount.setScale(2)
+                    + " is less than the outstanding amount of " + expected.setScale(2) + ".");
+        }
+        if (collectedAmount.compareTo(expected) > 0) {
+            throw new ConflictException("The collected amount cannot exceed the outstanding amount of "
+                    + expected.setScale(2) + ".");
+        }
+
+        payment.setAmount(expected);
         paymentService.markPaymentReceived(order, transactionRef);
 
         return enrichOne(order, boy);
@@ -659,6 +719,33 @@ public class DeliveryService {
 
     private boolean contains(String value, String keyword) {
         return value != null && value.toLowerCase(Locale.ROOT).contains(keyword);
+    }
+
+    /**
+     * Validates the admin-chosen delivery date and slot against the existing
+     * weekday/weekend rules and returns the normalised (trimmed) slot. The date
+     * is a plain {@link LocalDate}, so neither the past-date check nor the
+     * weekday lookup is affected by any timezone conversion.
+     */
+    private String validateDeliveryDateAndSlot(LocalDate date, String slot) {
+        if (date == null) {
+            throw new BadRequestException("Select a delivery date");
+        }
+        if (date.isBefore(LocalDate.now())) {
+            throw new BadRequestException("The delivery date cannot be in the past.");
+        }
+        if (slot == null || slot.isBlank()) {
+            throw new BadRequestException("Select a delivery time slot");
+        }
+        String trimmed = slot.trim();
+        boolean weekend = date.getDayOfWeek().getValue() >= 6;
+        Set<String> allowed = weekend ? WEEKEND_SLOTS : WEEKDAY_SLOTS;
+        if (!allowed.contains(trimmed)) {
+            throw new BadRequestException("That time slot is not available on the selected "
+                    + (weekend ? "weekend" : "weekday") + " date. Please choose one of: "
+                    + String.join(", ", allowed) + ".");
+        }
+        return trimmed;
     }
 
     private String normalize(String value) {

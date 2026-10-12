@@ -219,6 +219,11 @@ h1, h2, h3 { font-family: 'Playfair Display', Georgia, serif; margin: 0; }
 .db-card.state-DELIVERED { border-left-color: var(--db-success); }
 .db-card.state-PENDING_ASSIGNMENT { border-left-color: var(--db-gold); }
 
+/* The whole card opens the Order Details view */
+.db-card[data-id] { cursor: pointer; transition: box-shadow 0.15s ease, transform 0.15s ease; }
+.db-card[data-id]:hover { box-shadow: 0 6px 18px rgba(0, 0, 0, 0.10); }
+.db-card[data-id]:focus-visible { outline: 2px solid var(--db-primary); outline-offset: 2px; }
+
 .db-card-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 0.6rem; }
 
 .db-order-no { font-weight: 700; font-size: 0.95rem; letter-spacing: 0.2px; }
@@ -396,18 +401,97 @@ h1, h2, h3 { font-family: 'Playfair Display', Georgia, serif; margin: 0; }
 .db-sheet-actions { display: flex; flex-direction: column; gap: 0.5rem; margin-top: 1.2rem; }
 
 .db-ref { font-size: 0.72rem; color: var(--db-muted); }
-.db-ref input {
-    width: 100%;
-    margin-top: 0.3rem;
-    border: 1px solid var(--db-border);
+
+.db-inline-msg {
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: #B91C1C;
+    background: #FEE2E2;
     border-radius: 10px;
-    padding: 0.6rem 0.75rem;
-    font: inherit;
-    font-size: 0.85rem;
-    background: #fff;
-    outline: none;
+    padding: 0.55rem 0.7rem;
+    margin-bottom: 0.65rem;
 }
-.db-ref input:focus { border-color: var(--db-gold); }
+.db-inline-msg[hidden] { display: none; }
+
+/* ---------------- Cash collection confirmation modal ---------------- */
+
+.db-cash-modal {
+    position: fixed;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 42;
+    width: min(90vw, 380px);
+    background: var(--db-card);
+    border-radius: 18px;
+    box-shadow: var(--db-shadow-lg);
+    animation: db-scale-in 0.18s ease;
+}
+.db-cash-modal[hidden] { display: none; }
+@keyframes db-scale-in {
+    from { opacity: 0; transform: translate(-50%, -48%) scale(0.96); }
+    to   { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+}
+
+.db-cash-modal-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding: 0.9rem 1.1rem;
+    border-bottom: 1px solid var(--db-border);
+}
+.db-cash-modal-head h2 { font-size: 1.05rem; }
+.db-cash-modal-head .db-icon-btn { background: #F6F2EC; color: var(--db-text); }
+
+.db-cash-modal-body { padding: 1.1rem; }
+.db-cash-modal-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 1rem;
+    font-size: 0.86rem;
+    padding: 0.28rem 0;
+}
+.db-cash-modal-label { color: var(--db-muted); }
+.db-cash-modal-value { font-weight: 600; text-align: right; }
+.db-cash-modal-amount {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: #FFFBEF;
+    border: 1px solid var(--db-border);
+    border-radius: 12px;
+    padding: 0.7rem 0.85rem;
+    margin: 0.6rem 0 0.4rem;
+}
+.db-cash-modal-amount strong { font-size: 1.15rem; color: #2B2013; }
+.db-cash-modal-question {
+    font-size: 0.86rem;
+    font-weight: 600;
+    color: var(--db-text);
+    margin: 0.5rem 0 0;
+}
+.db-cash-modal-foot {
+    display: flex;
+    gap: 0.6rem;
+    padding: 0 1.1rem 1.1rem;
+}
+.db-cash-modal-foot .db-btn { flex: 1; }
+
+.db-warn-modal-msg {
+    font-size: 0.9rem;
+    font-weight: 600;
+    line-height: 1.5;
+    color: var(--db-text);
+    margin: 0;
+}
+.db-warn-modal-sub {
+    font-size: 0.78rem;
+    line-height: 1.45;
+    color: var(--db-muted);
+    margin: 0.4rem 0 0;
+}
 
 /* ---------------- Toast ---------------- */
 

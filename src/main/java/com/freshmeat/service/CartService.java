@@ -106,6 +106,11 @@ public class CartService {
         String cutting = request.getCuttingOption();
         if (cutting == null || cutting.isBlank()) {
             cutting = product.getCuttingOptions().isEmpty() ? CuttingOption.WHOLE.name() : product.getCuttingOptions().get(0);
+        } else if (product.getCuttingOptions().isEmpty() && CuttingOption.WHOLE.name().equalsIgnoreCase(cutting)) {
+            // Products without cutting options still carry the WHOLE default on
+            // stored order items; "buy again" replays it, so accept it instead
+            // of throwing "This product does not support cutting options".
+            cutting = CuttingOption.WHOLE.name();
         } else {
             validateCutting(product, cutting);
         }

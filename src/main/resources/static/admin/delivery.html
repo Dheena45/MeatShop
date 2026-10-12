@@ -28,6 +28,17 @@
         <label class="form-label" for="as-boy">Delivery Boy</label>
         <select class="form-select form-control-fm" id="as-boy"></select>
         <div class="form-text text-muted" style="font-size:0.75rem;" id="as-hint">Only active Delivery Boys are listed.</div>
+        <div class="row g-2 mt-2">
+          <div class="col-6">
+            <label class="form-label" for="as-date">Delivery Date</label>
+            <input type="date" class="form-control form-control-fm" id="as-date">
+          </div>
+          <div class="col-6">
+            <label class="form-label" for="as-slot">Delivery Slot</label>
+            <select class="form-select form-control-fm" id="as-slot"></select>
+          </div>
+        </div>
+        <div class="form-text text-muted" style="font-size:0.75rem;">The slot list follows the weekday/weekend rules the customer saw at checkout.</div>
       </div>
       <div class="modal-footer">
         <button type="button" class="btn-admin-outline" data-bs-dismiss="modal">Cancel</button>
@@ -37,20 +48,15 @@
   </div>
 </div>
 
-<!-- Delivery detail + handover history -->
-<div class="modal fade" id="detailModal" tabindex="-1" aria-labelledby="detailModalLabel" aria-hidden="true">
+<!-- Order detail modal (shared with the Orders page) -->
+<div class="modal fade" id="orderModal" tabindex="-1">
   <div class="modal-dialog modal-lg modal-dialog-centered">
     <div class="modal-content">
       <div class="modal-header">
-        <h5 class="modal-title" id="detailModalLabel">
-          <i class="fa-solid fa-truck-fast text-primary me-2"></i>Delivery #<span id="dt-order-no">-</span>
-        </h5>
-        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        <h5 class="modal-title"><i class="fa-solid fa-receipt me-2 text-primary"></i>Order #<span id="om-number"></span></h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
       </div>
-      <div class="modal-body" id="dt-body"></div>
-      <div class="modal-footer">
-        <button type="button" class="btn-admin-outline" data-bs-dismiss="modal">Close</button>
-      </div>
+      <div class="modal-body" id="om-body"></div>
     </div>
   </div>
 </div>

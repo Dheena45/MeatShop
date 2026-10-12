@@ -59,11 +59,27 @@ public class ProfileController {
     @PostMapping("/addresses")
     public ResponseEntity<ApiResponse<DeliveryAddressDTO>> addAddress(@Valid @RequestBody DeliveryAddressDTO dto) {
         User user = authService.getCurrentUser();
+
+        // Reuse an identical address instead of writing a duplicate row. This is
+        // what keeps repeat checkouts from piling up the same address.
+        DeliveryAddress existing = findMatching(user, dto);
+        if (existing != null) {
+            boolean promoted = false;
+            if (Boolean.TRUE.equals(dto.getIsDefault()) && !Boolean.TRUE.equals(existing.getIsDefault())) {
+                clearDefaults(user, existing.getId());
+                existing.setIsDefault(true);
+                existing = addressRepository.save(existing);
+                promoted = true;
+            }
+            return ResponseEntity.ok(ApiResponse.ok(
+                    promoted ? "Address saved as default" : "Address already saved", toDTO(existing)));
+        }
+
         DeliveryAddress address = new DeliveryAddress();
-        applyDTO(address, dto);
         address.setUser(user);
+        applyDTO(address, dto);
         if (Boolean.TRUE.equals(dto.getIsDefault())) {
-            clearDefaults(user);
+            clearDefaults(user, null);
         }
         address = addressRepository.save(address);
         return ResponseEntity.ok(ApiResponse.ok("Address saved", toDTO(address)));
@@ -80,7 +96,9 @@ public class ProfileController {
         }
         applyDTO(address, dto);
         if (Boolean.TRUE.equals(dto.getIsDefault())) {
-            clearDefaults(user);
+            // Exclude the address being saved so its freshly-set default flag is
+            // not immediately cleared by the sweep over the other rows.
+            clearDefaults(user, address.getId());
         }
         address = addressRepository.save(address);
         return ResponseEntity.ok(ApiResponse.ok("Address updated", toDTO(address)));
@@ -98,15 +116,44 @@ public class ProfileController {
         return ResponseEntity.ok(ApiResponse.ok("Address deleted", null));
     }
 
-    private void clearDefaults(User user) {
+    /**
+     * Clears the default flag from the customer's other addresses. {@code keepId}
+     * (when non-null) is left untouched so promoting or updating a single address
+     * to default does not immediately undo itself.
+     */
+    private void clearDefaults(User user, Long keepId) {
         List<DeliveryAddress> addresses = addressRepository
                 .findByUserIdOrderByIsDefaultDescCreatedAtDesc(user.getId());
         for (DeliveryAddress a : addresses) {
-            if (Boolean.TRUE.equals(a.getIsDefault())) {
+            if (Boolean.TRUE.equals(a.getIsDefault())
+                    && (keepId == null || !keepId.equals(a.getId()))) {
                 a.setIsDefault(false);
                 addressRepository.save(a);
             }
         }
+    }
+
+    /** Finds an already-saved address with exactly the same delivery details. */
+    private DeliveryAddress findMatching(User user, DeliveryAddressDTO dto) {
+        List<DeliveryAddress> addresses = addressRepository
+                .findByUserIdOrderByIsDefaultDescCreatedAtDesc(user.getId());
+        for (DeliveryAddress a : addresses) {
+            if (sameField(a.getDoorNumber(), dto.getDoorNumber())
+                    && sameField(a.getStreet(), dto.getStreet())
+                    && sameField(a.getArea(), dto.getArea())
+                    && sameField(a.getCity(), dto.getCity())
+                    && sameField(a.getState(), dto.getState())
+                    && sameField(a.getPincode(), dto.getPincode())) {
+                return a;
+            }
+        }
+        return null;
+    }
+
+    private static boolean sameField(String left, String right) {
+        String l = left == null ? "" : left.trim().toLowerCase();
+        String r = right == null ? "" : right.trim().toLowerCase();
+        return l.equals(r);
     }
 
     private void applyDTO(DeliveryAddress address, DeliveryAddressDTO dto) {

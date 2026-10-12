@@ -2,6 +2,10 @@
    Talks only to /api/delivery/**. Any other order id is rejected server side
    with 403, so there is nothing to hide on the client either. */
 
+// Every delivery page operates on the DELIVERY_BOY session
+// (freshmeat_delivery_* keys), independent of admin/customer sessions.
+Auth.setRole('delivery');
+
 let dbState = '';
 let dbSearch = '';
 let dbOrders = [];
@@ -19,8 +23,9 @@ document.addEventListener('DOMContentLoaded', function () {
         new Date().toLocaleDateString('en-IN', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' });
 
     document.getElementById('logout-btn').addEventListener('click', function () {
+        // Only the DELIVERY_BOY keys are removed; other roles stay logged in.
         Auth.clear();
-        window.location.href = '/login.html';
+        window.location.href = '/login.html?role=delivery';
     });
     document.getElementById('db-refresh').addEventListener('click', function () {
         loadAll(true);
@@ -31,8 +36,24 @@ document.addEventListener('DOMContentLoaded', function () {
     }, 350));
     document.getElementById('sheet-close').addEventListener('click', closeSheet);
     document.getElementById('sheet-backdrop').addEventListener('click', closeSheet);
+    document.getElementById('cash-backdrop').addEventListener('click', closeCashConfirm);
+    document.getElementById('cash-modal-close').addEventListener('click', closeCashConfirm);
+    document.getElementById('cash-modal-cancel').addEventListener('click', closeCashConfirm);
+    document.getElementById('cash-confirm-btn').addEventListener('click', confirmCashCollect);
+    document.getElementById('warn-backdrop').addEventListener('click', closeCashWarn);
+    document.getElementById('warn-modal-close').addEventListener('click', closeCashWarn);
+    document.getElementById('warn-cancel').addEventListener('click', closeCashWarn);
+    document.getElementById('warn-collect').addEventListener('click', function () {
+        const target = warnOrder;
+        closeCashWarn();
+        if (target) openCashConfirm(target.id);
+    });
     document.addEventListener('keydown', function (e) {
-        if (e.key === 'Escape') closeSheet();
+        if (e.key === 'Escape') {
+            closeSheet();
+            closeCashConfirm();
+            closeCashWarn();
+        }
     });
 
     document.querySelectorAll('.db-tab').forEach(tab => {
@@ -144,14 +165,17 @@ function renderList() {
 
         const actions = [];
         if (d.canStart) {
-            actions.push(`<button class="db-btn db-btn-primary" data-action="start" data-id="${o.id}">
-                <i class="fa-solid fa-location-arrow"></i>Start Delivery</button>`);
+            actions.push(`<button class="db-btn db-btn-primary" data-action="pickup" data-id="${o.id}">
+                <i class="fa-solid fa-box"></i>Confirm Pickup</button>`);
         }
         if (d.canCollectCash) {
             actions.push(`<button class="db-btn db-btn-gold" data-action="cash" data-id="${o.id}">
                 <i class="fa-solid fa-money-bill-wave"></i>Collect ${fmtMoney(o.grandTotal)}</button>`);
         }
-        if (d.canMarkDelivered) {
+        // Mark Delivered stays visible for every order being delivered so the
+        // boy always sees the way forward; the click handler gates the COD
+        // unpaid case (warning modal, no API call) before calling the API.
+        if (state === 'OUT_FOR_DELIVERY') {
             actions.push(`<button class="db-btn db-btn-green" data-action="delivered" data-id="${o.id}">
                 <i class="fa-solid fa-circle-check"></i>Mark Delivered</button>`);
         }
@@ -175,7 +199,7 @@ function renderList() {
         }
 
         return `
-        <article class="db-card state-${state}">
+        <article class="db-card state-${state}" data-id="${o.id}" role="button" tabindex="0" title="View order details">
             <div class="db-card-top">
                 <div>
                     <div class="db-order-no">#${escapeHtml(o.orderNumber)}</div>
@@ -190,8 +214,9 @@ function renderList() {
             </div>
             <div class="db-meta">
                 <span><i class="fa-regular fa-clock"></i>${escapeHtml(o.deliverySlot || 'Any time')}</span>
+                ${d.deliveryDate && d.deliverySlot ? '<span><i class="fa-solid fa-calendar-days"></i>' + escapeHtml(d.deliveryDate) + ' ' + escapeHtml(d.deliverySlot) + '</span>' : ''}
                 <span><i class="fa-solid fa-boxes-stacked"></i>${(o.items || []).length} item(s)</span>
-                ${d.startedAt ? '<span><i class="fa-solid fa-play"></i>Started ' + fmtDate(d.startedAt) + '</span>' : ''}
+                ${d.startedAt ? '<span><i class="fa-solid fa-box-open"></i>Picked Up ' + fmtDate(d.startedAt) + '</span>' : ''}
                 ${d.completedAt ? '<span><i class="fa-solid fa-flag-checkered"></i>Delivered ' + fmtDate(d.completedAt) + '</span>' : ''}
             </div>
 
@@ -204,13 +229,30 @@ function renderList() {
 
 document.getElementById('db-list').addEventListener('click', function (e) {
     const btn = e.target.closest('[data-action]');
-    if (!btn) return;
-    const id = Number(btn.dataset.id);
-    const action = btn.dataset.action;
-    if (action === 'view') openSheet(id);
-    else if (action === 'start') doAction(btn, id, 'start', 'Delivery started. Have a safe trip!');
-    else if (action === 'cash') openSheet(id, 'cash');
-    else if (action === 'delivered') doAction(btn, id, 'delivered', 'Order marked as delivered.');
+    if (btn) {
+        const id = Number(btn.dataset.id);
+        const action = btn.dataset.action;
+        if (action === 'view') openSheet(id);
+        else if (action === 'pickup') doAction(btn, id, 'pickup', 'Pickup confirmed. Order is out for delivery!');
+        else if (action === 'cash') openCashConfirm(id);
+        else if (action === 'delivered') handleDeliver(btn, id);
+        return;
+    }
+    // Tapping anywhere on an assigned order's card (including its status chip)
+    // opens the Order Details view.
+    const card = e.target.closest('.db-card[data-id]');
+    if (card) openSheet(Number(card.dataset.id));
+});
+
+document.getElementById('db-list').addEventListener('keydown', function (e) {
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    // Let the inner action buttons handle their own keyboard activation.
+    if (e.target.closest('[data-action]')) return;
+    const card = e.target.closest('.db-card[data-id]');
+    if (card) {
+        e.preventDefault();
+        openSheet(Number(card.dataset.id));
+    }
 });
 
 async function doAction(btn, orderId, action, successMsg) {
@@ -235,7 +277,7 @@ async function doAction(btn, orderId, action, successMsg) {
     }
 }
 
-function openSheet(orderId, focus) {
+function openSheet(orderId) {
     const cached = dbOrders.find(o => o.id === orderId);
     if (cached) renderSheet(cached);
 
@@ -244,15 +286,7 @@ function openSheet(orderId, focus) {
     document.body.style.overflow = 'hidden';
 
     apiCall('/api/delivery/' + orderId)
-        .then(res => {
-            renderSheet(res.data);
-            if (focus === 'cash') {
-                setTimeout(() => {
-                    const ref = document.getElementById('sheet-ref');
-                    if (ref) ref.focus();
-                }, 250);
-            }
-        })
+        .then(res => renderSheet(res.data))
         .catch(e => {
             if (handleAuth(e)) return;
             toast(e.message || 'Could not load this delivery.', 'err');
@@ -280,25 +314,22 @@ function renderSheet(o) {
 
     const items = (o.items || []).map(i => `
         <li>
-            <span>${escapeHtml(i.productName || 'Item')} <span class="db-ref">x${i.quantity}</span></span>
+            <span>${escapeHtml(i.productName || 'Item')} <span class="db-ref">x${i.quantity} KG</span>
+                ${i.cuttingOption ? '<span class="db-detail-value muted" style="font-size:0.72rem;display:block;">' + escapeHtml(String(i.cuttingOption).replace(/_/g, ' ')) + '</span>' : ''}
+            </span>
             <span>${fmtMoney(i.subtotal)}</span>
         </li>`).join('');
 
     let actions = '';
     if (d.canStart) {
-        actions += `<button class="db-btn db-btn-primary" data-sheet-action="start" data-id="${o.id}">
-            <i class="fa-solid fa-location-arrow"></i>Start Delivery</button>`;
+        actions += `<button class="db-btn db-btn-primary" data-sheet-action="pickup" data-id="${o.id}">
+            <i class="fa-solid fa-box"></i>Confirm Pickup</button>`;
     }
     if (d.canCollectCash) {
-        actions += `
-        <div class="db-ref">
-            <label for="sheet-ref">Cash received from customer (optional note / UPI ref)</label>
-            <input type="text" id="sheet-ref" maxlength="100" placeholder="e.g. UPI 4821-9930" autocomplete="off">
-        </div>
-        <button class="db-btn db-btn-gold" data-sheet-action="cash" data-id="${o.id}">
+        actions += `<button class="db-btn db-btn-gold" data-sheet-action="cash" data-id="${o.id}">
             <i class="fa-solid fa-money-bill-wave"></i>Collect ${fmtMoney(o.grandTotal)} Cash</button>`;
     }
-    if (d.canMarkDelivered) {
+    if (state === 'OUT_FOR_DELIVERY') {
         actions += `<button class="db-btn db-btn-green" data-sheet-action="delivered" data-id="${o.id}">
             <i class="fa-solid fa-circle-check"></i>Mark Delivered</button>`;
     }
@@ -331,7 +362,12 @@ function renderSheet(o) {
     <div class="db-detail-block">
         <div class="db-detail-label">Items (${(o.items || []).length})</div>
         <ul class="db-items">${items || '<li><span class="db-detail-value muted">No item details</span></li>'}</ul>
-        <div class="db-detail-value big mt-2">Total: ${fmtMoney(o.grandTotal)}</div>
+        <div class="db-detail-value muted mt-2" style="font-size:0.82rem;">
+            <div class="d-flex justify-content-between"><span>Subtotal</span><span>${fmtMoney(o.subtotal)}</span></div>
+            <div class="d-flex justify-content-between"><span>Discount</span><span>-${fmtMoney(o.discountAmount)}</span></div>
+            <div class="d-flex justify-content-between"><span>Delivery</span><span>${Number(o.deliveryCharge) === 0 ? 'FREE' : fmtMoney(o.deliveryCharge)}</span></div>
+            <div class="d-flex justify-content-between fw-bold" style="color:var(--db-text);"><span>Total</span><span>${fmtMoney(o.grandTotal)}</span></div>
+        </div>
     </div>
 
     <div class="db-detail-block">
@@ -339,7 +375,7 @@ function renderSheet(o) {
         <div class="db-detail-value">
             ${escapeHtml((o.paymentMethod || '-').replace(/_/g, ' '))}
             <span class="db-pay-badge ${escapeHtml(o.paymentStatus || 'PENDING')}" style="margin-left:0.35rem;">${escapeHtml(o.paymentStatus || 'PENDING')}</span>
-            ${cod && unpaid ? '<div class="db-cod-hint mt-1"><i class="fa-solid fa-triangle-exclamation me-1"></i>Collect the cash before marking delivered.</div>' : ''}
+            ${cod && unpaid ? '<div class="db-cod-hint mt-1"><i class="fa-solid fa-triangle-exclamation me-1"></i>Please collect and submit the full cash payment before confirming delivery.</div>' : ''}
             ${o.paidAt ? '<div class="db-detail-value muted" style="font-size:0.78rem;">Paid ' + fmtDate(o.paidAt) + '</div>' : ''}
         </div>
     </div>
@@ -347,10 +383,11 @@ function renderSheet(o) {
     <div class="db-detail-block">
         <div class="db-detail-label">Delivery Progress</div>
         <div class="db-detail-value muted" style="font-size:0.82rem;">
+            ${d.deliveryDate && d.deliverySlot ? '<div><i class="fa-solid fa-calendar-days me-1"></i>Scheduled: ' + escapeHtml(d.deliveryDate) + ' ' + escapeHtml(d.deliverySlot) + '</div>' : ''}
             ${d.assignedAt ? '<div><i class="fa-solid fa-user-check me-1"></i>Assigned: ' + fmtDate(d.assignedAt) + '</div>' : ''}
-            ${d.startedAt ? '<div><i class="fa-solid fa-location-arrow me-1"></i>Started: ' + fmtDate(d.startedAt) + '</div>' : ''}
+            ${d.startedAt ? '<div><i class="fa-solid fa-box-open me-1"></i>Picked Up: ' + fmtDate(d.startedAt) + '</div>' : ''}
             ${d.completedAt ? '<div><i class="fa-solid fa-flag-checkered me-1"></i>Delivered: ' + fmtDate(d.completedAt) + '</div>' : ''}
-            ${!d.startedAt && !d.completedAt ? '<div>Waiting for you to start this delivery.</div>' : ''}
+            ${!d.startedAt && !d.completedAt ? '<div>Waiting for you to confirm the pickup at the store.</div>' : ''}
         </div>
     </div>
 
@@ -369,33 +406,149 @@ document.getElementById('sheet-body').addEventListener('click', function (e) {
     const action = btn.dataset.sheetAction;
 
     if (action === 'cash') {
-        const ref = document.getElementById('sheet-ref');
-        collectCash(btn, id, ref ? ref.value.trim() : '');
+        openCashConfirm(id);
+    } else if (action === 'delivered') {
+        handleDeliver(btn, id);
     } else {
-        doAction(btn, id, action, action === 'start' ? 'Delivery started. Have a safe trip!' : 'Order marked as delivered.');
+        doAction(btn, id, action, 'Pickup confirmed. Order is out for delivery!');
     }
 });
 
-async function collectCash(btn, orderId, transactionRef) {
-    btn.classList.add('loading');
-    btn.disabled = true;
-    const icon = btn.querySelector('i');
-    if (icon) icon.classList.add('fa-spin');
+/* ---------------- Cash collection confirmation modal ---------------- */
 
+let cashOrder = null;
+
+/** Opens a fresh copy of the order (server-authoritative) inside the modal. */
+async function openCashConfirm(orderId) {
+    // The cash modal is the follow-up to the warning modal; dismiss the warning
+    // first so the two dialogs never stack on the same overlay layer.
+    closeCashWarn();
     try {
-        await apiCall('/api/delivery/' + orderId + '/payment-received', {
-            method: 'PUT',
-            body: { transactionRef: transactionRef || '' }
-        });
-        toast('Cash collected. Now mark the order as delivered.', 'ok');
-        closeSheet();
-        await loadAll();
+        const res = await apiCall('/api/delivery/' + orderId);
+        cashOrder = res.data;
+        renderCashConfirm();
+        document.getElementById('cash-backdrop').hidden = false;
+        document.getElementById('cash-modal').hidden = false;
+        document.body.style.overflow = 'hidden';
     } catch (e) {
         if (handleAuth(e)) return;
+        toast(e.message || 'Could not open cash collection.', 'err');
+    }
+}
+
+function renderCashConfirm() {
+    const o = cashOrder;
+    if (!o) return;
+    document.getElementById('cash-modal-order').textContent = '#' + (o.orderNumber || o.id);
+    document.getElementById('cash-modal-customer').textContent = o.customerName || '-';
+    document.getElementById('cash-modal-method').textContent =
+        String(o.paymentMethod || 'CASH_ON_DELIVERY').replace(/_/g, ' ');
+    document.getElementById('cash-modal-amount').textContent = fmtMoney(o.grandTotal);
+    const msg = document.getElementById('cash-modal-msg');
+    if (msg) msg.hidden = true;
+    const btn = document.getElementById('cash-confirm-btn');
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fa-solid fa-money-bill-wave"></i>Confirm Cash Collected';
+}
+
+function closeCashConfirm() {
+    document.getElementById('cash-backdrop').hidden = true;
+    document.getElementById('cash-modal').hidden = true;
+    document.body.style.overflow = '';
+    cashOrder = null;
+}
+
+/* ---------------- Cash-not-collected warning modal ---------------- */
+
+let warnOrder = null;
+
+/** Latest server-backed view of an order for the pre-delivery client gate. */
+function orderSnapshot(orderId) {
+    if (sheetOrder && sheetOrder.id === orderId) return sheetOrder;
+    return dbOrders.find(o => o.id === orderId) || null;
+}
+
+/**
+ * Client-side gate checked BEFORE calling the delivery-completion API. It only
+ * mirrors the backend rule for UX; it never bypasses server enforcement, which
+ * re-checks payment method, payment status and the boy's ownership.
+ */
+function deliveryGate(order) {
+    if (!order) return { type: 'unknown' };
+    const cod = order.paymentMethod === 'CASH_ON_DELIVERY';
+    if (cod && order.paymentStatus !== 'PAID') return { type: 'cod-unpaid', order };
+    if (order.paymentStatus !== 'PAID') return { type: 'unpaid', order };
+    return null;
+}
+
+function handleDeliver(btn, orderId) {
+    const gate = deliveryGate(orderSnapshot(orderId));
+    if (gate && gate.type === 'cod-unpaid') {
+        openCashWarn(gate.order);
+        return; // do NOT call the delivery API until the cash has been collected
+    }
+    if (gate) {
+        toast('This order cannot be marked delivered until its payment is complete.', 'err');
+        return;
+    }
+    doAction(btn, orderId, 'delivered', 'Order marked as delivered.');
+}
+
+function openCashWarn(order) {
+    warnOrder = order;
+    // Always the backend's actual grand total for this order, never a constant.
+    document.getElementById('warn-modal-msg').textContent =
+        'Cash has not been collected yet. Please collect ' + fmtMoney(order.grandTotal) +
+        ' from the customer before marking this order as delivered.';
+    document.getElementById('warn-backdrop').hidden = false;
+    document.getElementById('warn-modal').hidden = false;
+    document.body.style.overflow = 'hidden';
+}
+
+function closeCashWarn() {
+    document.getElementById('warn-backdrop').hidden = true;
+    document.getElementById('warn-modal').hidden = true;
+    document.body.style.overflow = '';
+    warnOrder = null;
+}
+
+async function confirmCashCollect() {
+    if (!cashOrder) return;
+
+    const btn = document.getElementById('cash-confirm-btn');
+    const msg = document.getElementById('cash-modal-msg');
+    if (msg) msg.hidden = true;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Saving...';
+
+    const orderId = cashOrder.id;
+    try {
+        // The server re-validates the amount (it must equal the order total),
+        // the COD method, the payment state and the boy's ownership; duplicate
+        // collection and unpaid/cancelled states are rejected there.
+        await apiCall('/api/delivery/' + orderId + '/payment-received', {
+            method: 'PUT',
+            body: { amount: Number(cashOrder.grandTotal), transactionRef: '' }
+        });
+        toast('Cash collected. Payment is PAID. You can now mark the order as delivered.', 'ok');
+        closeCashConfirm();
+        await loadAll();
+
+        // Keep an open detail sheet in sync with the fresh server state so the
+        // PAID badge and the newly-enabled Mark Delivered button appear in
+        // place, without leaving this page.
+        if (!document.getElementById('detail-sheet').hidden) {
+            const fresh = dbOrders.find(o => o.id === orderId);
+            if (fresh) renderSheet(fresh);
+        }
+    } catch (e) {
+        if (handleAuth(e)) return;
+        // The order stays OUT_FOR_DELIVERY and unpaid; tell the boy the exact
+        // reason inline so the failure is never mistaken for a success.
+        if (msg) { msg.textContent = e.message || 'Could not record the payment.'; msg.hidden = false; }
         toast(e.message || 'Could not record the payment.', 'err');
-        btn.classList.remove('loading');
         btn.disabled = false;
-        if (icon) icon.classList.remove('fa-spin');
+        btn.innerHTML = '<i class="fa-solid fa-money-bill-wave"></i>Confirm Cash Collected';
     }
 }
 
@@ -408,7 +561,7 @@ function handleAuth(e) {
             : 'Your session expired. Please sign in again.', 'err');
         setTimeout(function () {
             Auth.clear();
-            window.location.href = '/login.html?redirect=' + encodeURIComponent('/delivery/dashboard.html');
+            window.location.href = '/login.html?role=delivery&redirect=' + encodeURIComponent('/delivery/dashboard.html');
         }, 1600);
         return true;
     }

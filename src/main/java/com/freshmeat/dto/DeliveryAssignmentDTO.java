@@ -2,6 +2,7 @@ package com.freshmeat.dto;
 
 import lombok.Data;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 /**
@@ -18,6 +19,8 @@ public class DeliveryAssignmentDTO {
     private String deliveryBoyPhone;
     /** ASSIGNED / STARTED / COMPLETED / CANCELLED / REASSIGNED */
     private String status;
+    private LocalDate deliveryDate;
+    private String deliverySlot;
     private LocalDateTime assignedAt;
     private LocalDateTime startedAt;
     private LocalDateTime completedAt;

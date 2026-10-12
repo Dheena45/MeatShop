@@ -3,21 +3,23 @@
 let currentFilter = '';
 let selectedOrder = null;
 let detailOrdersCache = {};
-let pendingOrderStatus = null;
-const ORDER_STATUS_MODAL = new bootstrap.Modal(document.getElementById('orderStatusModal'));
+let statusUpdateInFlight = false;
 const PAYMENT_MODAL = new bootstrap.Modal(document.getElementById('paymentModal'));
-// Mirrors OrderService.NEXT_STATUS so the dropdown only offers the legal next
-// step. The server is still the authority: CONFIRMED -> PREPARING is rejected
-// there with a clear message when no Delivery Boy has been confirmed, so the
-// option stays visible and the reason for the rejection is shown in a toast.
-// PLACED is kept here even though it is not an Admin filter button, because an
-// order awaiting payment confirmation still has to be confirmable.
+// Mirrors OrderService.NEXT_STATUS for the ADMIN path only. The admin drives the
+// order from PLACED (confirm) through to READY_FOR_PICKUP and can cancel any
+// time; the two hand-over steps are deliberately NOT offered here because
+// confirming the pick-up (READY_FOR_PICKUP -> OUT_FOR_DELIVERY) and marking it
+// delivered (OUT_FOR_DELIVERY -> DELIVERED) are actions for the assigned
+// Delivery Boy. The server enforces the same rule, so even a direct API call
+// cannot reach them. Making the order READY_FOR_PICKUP does not require an
+// assignment yet; the Delivery Boy is assigned afterwards and pickup itself then
+// requires an active assignment.
 const ORDER_TRANSITIONS = {
     'PLACED': ['CONFIRMED', 'CANCELLED'],
     'CONFIRMED': ['PREPARING', 'CANCELLED'],
     'PREPARING': ['READY_FOR_PICKUP', 'CANCELLED'],
-    'READY_FOR_PICKUP': ['OUT_FOR_DELIVERY', 'CANCELLED'],
-    'OUT_FOR_DELIVERY': ['DELIVERED'],
+    'READY_FOR_PICKUP': ['CANCELLED'],
+    'OUT_FOR_DELIVERY': [],
     'DELIVERED': [],
     'CANCELLED': []
 };
@@ -57,7 +59,6 @@ document.addEventListener('DOMContentLoaded', function () {
     });
 
     document.getElementById('order-search').addEventListener('input', debounce(() => loadOrders(), 400));
-    document.getElementById('order-status-confirm-btn').addEventListener('click', confirmOrderStatusUpdate);
     document.getElementById('payment-confirm-btn').addEventListener('click', confirmPaymentReceived);
     // Confirming a Delivery Boy is an ASSIGNMENT, not an order status change.
     // This posts to /api/admin/delivery/{id}/assign and leaves the order status
@@ -66,11 +67,6 @@ document.addEventListener('DOMContentLoaded', function () {
 
     // Clean focus before Bootstrap toggles aria-hidden on hide, so no element
     // inside the hidden modal keeps focus (prevents the blocked aria-hidden warning).
-    document.getElementById('orderStatusModal').addEventListener('hidden.bs.modal', () => {
-        const modalEl = document.getElementById('orderStatusModal');
-        const active = document.activeElement;
-        if (modalEl && active && modalEl.contains(active)) active.blur();
-    });
     document.getElementById('paymentModal').addEventListener('hidden.bs.modal', () => {
         const modalEl = document.getElementById('paymentModal');
         const active = document.activeElement;
@@ -108,7 +104,7 @@ async function loadOrders() {
                 `<div><strong>${escapeHtml(i.productName)}</strong> × ${i.quantity} KG</div>`
               ).join('');
               return `
-            <tr>
+            <tr class="row-clickable" onclick="openOrderModal(${o.id})" title="View order details">
               <td><strong class="small">${escapeHtml(o.orderNumber)}</strong></td>
               <td>
                 <strong class="small">${escapeHtml(o.customerName)}</strong>
@@ -119,7 +115,7 @@ async function loadOrders() {
               <td class="text-muted" style="font-size:0.78rem;">${fmtDate(o.createdAt)}</td>
               <td class="text-muted" style="font-size:0.78rem;">${escapeHtml(o.deliverySlot || '-')}</td>
               <td style="font-size:0.78rem;">${escapeHtml((o.paymentMethod || '').replace(/_/g, ' '))}</td>
-              <td style="cursor:pointer;" onclick="openOrderModal(${o.id})" title="View / Update Status">${adminStatusBadge(o.status)}</td>
+              <td>${adminStatusBadge(o.status)}</td>
             </tr>`}).join('')}
           </tbody>
         </table>`;
@@ -137,101 +133,12 @@ async function openOrderModal(id) {
 
         document.getElementById('om-number').textContent = selectedOrder.orderNumber;
         const o = selectedOrder;
-        const nextStatuses = ORDER_TRANSITIONS[o.status] || [];
-        const canUpdate = nextStatuses.length > 0;
-        const terminalNote = !canUpdate
-            ? (o.status === 'DELIVERED'
-                ? 'This order has been delivered and cannot be changed.'
-                : o.status === 'CANCELLED'
-                    ? 'This order has been cancelled and cannot be changed.'
-                    : '')
-            : '';
 
         const body = document.getElementById('om-body');
-        body.innerHTML = `
-        <div class="row g-3 mb-3">
-          <div class="col-md-6">
-            <label class="form-label">Status</label>
-            <select class="form-select form-control-fm" id="om-status" ${canUpdate ? '' : 'disabled'}>
-              <option value="${o.status}" selected>${o.status.replace(/_/g, ' ')}</option>
-              ${nextStatuses.map(s =>
-                  `<option value="${s}">${s.replace(/_/g, ' ')}</option>`).join('')}
-            </select>
-            ${terminalNote ? `<div class="form-text text-muted" style="font-size:0.78rem;">${terminalNote}</div>` : ''}
-          </div>
-          <div class="col-md-6 d-flex align-items-end">
-            <button class="btn-admin" id="om-update-btn" onclick="updateOrderStatus()" ${canUpdate ? '' : 'disabled'}><i class="fa-solid fa-floppy-disk me-1"></i>Update Status</button>
-          </div>
-        </div>
-
-        <table class="table table-fm align-middle">
-          <thead><tr><th>Product</th><th>Qty</th><th>Cutting</th><th>Price/KG</th><th class="text-end">Subtotal</th></tr></thead>
-          <tbody>
-            ${(o.items || []).map(i => `
-              <tr>
-                <td><strong class="small">${escapeHtml(i.productName)}</strong></td>
-                <td>${i.quantity} KG</td>
-                <td class="text-muted" style="font-size:0.78rem;">${escapeHtml((i.cuttingOption || '').replace(/_/g, ' '))}</td>
-                <td>${fmtMoney(i.pricePerKg)}</td>
-                <td class="text-end">${fmtMoney(i.subtotal)}</td>
-              </tr>`).join('')}
-          </tbody>
-        </table>
-
-        <div class="row g-2 mt-1">
-          <div class="col-md-7">
-            <label class="form-label">Customer</label>
-            <p class="mb-1">${escapeHtml(o.customerName)} &nbsp; ${escapeHtml(o.customerPhone || '')}</p>
-            <p class="mb-2 text-muted small">${escapeHtml(o.customerEmail || '')}</p>
-            <label class="form-label">Delivery Address</label>
-            <p class="mb-1" style="font-size:0.85rem;">
-              ${escapeHtml(o.deliveryDoor)}, ${escapeHtml(o.deliveryStreet)}, ${escapeHtml(o.deliveryArea)},<br>
-              ${escapeHtml(o.deliveryCity)} - ${escapeHtml(o.deliveryPincode)}, ${escapeHtml(o.deliveryState)}
-            </p>
-            <p class="text-muted" style="font-size:0.82rem;">
-              <i class="fa-solid fa-clock me-1"></i>Slot: ${escapeHtml(o.deliverySlot || '-')}<br>
-              <i class="fa-solid fa-note-sticky me-1"></i>Notes: ${escapeHtml(o.notes || '-')}
-            </p>
-          </div>
-          <div class="col-md-5">
-            <label class="form-label">Summary</label>
-            <div class="small">
-              <div class="d-flex justify-content-between"><span>Subtotal</span><span>${fmtMoney(o.subtotal)}</span></div>
-              <div class="d-flex justify-content-between"><span>Discount</span><span class="text-success">-${fmtMoney(o.discountAmount)}</span></div>
-              <div class="d-flex justify-content-between"><span>Tax</span><span>${fmtMoney(o.tax)}</span></div>
-              <div class="d-flex justify-content-between"><span>Delivery</span><span>${Number(o.deliveryCharge) === 0 ? 'FREE' : fmtMoney(o.deliveryCharge)}</span></div>
-              <hr class="my-1">
-              <div class="d-flex justify-content-between fw-bold"><span>Grand Total</span><span>${fmtMoney(o.grandTotal)}</span></div>
-              <div class="d-flex justify-content-between text-muted" style="font-size:0.78rem;">
-                <span>Payment</span><span>${escapeHtml((o.paymentMethod || '').replace(/_/g, ' '))}</span>
-              </div>
-              <div class="d-flex justify-content-between text-muted" style="font-size:0.78rem;">
-                <span>Payment Status</span><span>${escapeHtml((o.paymentStatus || '').replace(/_/g, ' '))}</span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-            <div class="d-flex flex-wrap gap-2 align-items-center mt-3 pt-2 border-top" style="border-top-color:var(--bg-alt) !important;">
-          <span style="font-size:0.78rem;font-weight:600;">Payment:</span>
-          ${paymentBadgeHtml(o)}
-          ${o.paymentStatus === 'PAID'
-            ? `<span class="text-muted" style="font-size:0.75rem;">Paid ${fmtMoney(o.paidAmount || o.grandTotal)}${o.paidAt ? ' on ' + fmtDate(o.paidAt) : ''}</span>`
-            : ''}
-          ${o.transactionRef ? `<span class="text-muted" style="font-size:0.75rem;">Ref: ${escapeHtml(o.transactionRef)}</span>` : ''}
-          ${o.status !== 'CANCELLED' ? `
-            <div class="ms-auto d-flex flex-wrap gap-2">
-              ${o.paymentMethod === 'CASH_ON_DELIVERY' && o.paymentStatus !== 'PAID'
-                ? `<button class="btn-admin-outline" onclick="markPaymentReceived()" title="Mark cash as collected">
-                     <i class="fa-solid fa-money-bill-wave me-1"></i>Mark Received</button>`
-                : ''}
-              <button class="btn-admin-outline" onclick="openInvoice()"><i class="fa-solid fa-file-invoice me-1"></i>View Invoice</button>
-              <button class="btn-admin-outline" onclick="printBill()"><i class="fa-solid fa-print me-1"></i>Print Bill</button>
-              <button class="btn-admin-outline" onclick="downloadInvoice()"><i class="fa-solid fa-download me-1"></i>PDF</button>
-            </div>` : ''}
-        </div>
-
-        ${deliveryPanelHtml(o)}`;
+        // One shared renderer for the order detail sections (products, customer,
+        // address, totals, payment line, delivery block), reused by the Delivery
+        // page; the status editor stays Orders-only above it.
+        body.innerHTML = statusEditorHtml(o) + orderDetailSectionsHtml(o, { paymentActions: true });
 
         // Assign / Reassign controls live inside the delivery panel.
         body.querySelectorAll('[data-delivery-assign]').forEach(btn => {
@@ -241,9 +148,10 @@ async function openOrderModal(id) {
             btn.addEventListener('click', () => openAssignModal(Number(btn.dataset.deliveryReassign), true));
         });
 
-        new bootstrap.Modal(document.getElementById('orderModal')).show();
+        bootstrap.Modal.getOrCreateInstance(document.getElementById('orderModal')).show();
     } catch (e) {
-        showToast(e.message, 'error');
+        if (e.status === 401 || e.status === 403) return Auth.requireAdmin();
+        showToast(e.message || 'Could not load this order.', 'error');
     }
 }
 
@@ -289,6 +197,18 @@ async function openAssignModal(orderId, isReassign) {
     document.getElementById('assign-confirm-btn').innerHTML =
         isReassign ? '<i class="fa-solid fa-user-clock me-1"></i>Reassign' : '<i class="fa-solid fa-user-plus me-1"></i>Confirm Delivery Boy';
 
+    // Delivery date + slot default to today, and the slot dropdown only ever
+    // offers the weekday/weekend slots the customer could have chosen. Both are
+    // required by the backend. On a reassign the previous date + slot are kept
+    // so an operator can swap the boy without silently rescheduling the order.
+    setupAssignSchedule('assign-date', 'assign-slot');
+    if (isReassign && order.delivery && order.delivery.deliveryDate) {
+        const dateInput = document.getElementById('assign-date');
+        dateInput.value = order.delivery.deliveryDate;
+        dateInput.dispatchEvent(new Event('change'));
+        document.getElementById('assign-slot').value = order.delivery.deliverySlot || '';
+    }
+
     // Hand over from the order modal to the assign modal only once the first
     // one has finished hiding, so Bootstrap never stacks two backdrops.
     const orderModal = bootstrap.Modal.getInstance(document.getElementById('orderModal'));
@@ -310,9 +230,17 @@ async function openAssignModal(orderId, isReassign) {
 async function confirmAssign() {
     const orderId = assignOrderId;
     const boyId = document.getElementById('assign-boy-select').value;
+    const date = document.getElementById('assign-date').value;
+    const slot = document.getElementById('assign-slot').value;
     const btn = document.getElementById('assign-confirm-btn');
     if (!boyId) {
         return showToast('Please select a Delivery Boy.', 'warning');
+    }
+    if (!date) {
+        return showToast('Please select a delivery date.', 'warning');
+    }
+    if (!slot) {
+        return showToast('Please select a delivery slot.', 'warning');
     }
     btn.disabled = true;
     btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Saving...';
@@ -320,12 +248,15 @@ async function confirmAssign() {
         const url = assignIsReassign
             ? '/api/admin/delivery/' + orderId + '/reassign'
             : '/api/admin/delivery/' + orderId + '/assign';
-        const res = await apiCall(url, { method: assignIsReassign ? 'PUT' : 'POST', body: { deliveryBoyId: Number(boyId) } });
+        const res = await apiCall(url, {
+            method: assignIsReassign ? 'PUT' : 'POST',
+            body: { deliveryBoyId: Number(boyId), deliveryDate: date, deliverySlot: slot }
+        });
         assignModalInstance.hide();
         delete assignOrderCache[orderId];
-        // Confirming a Delivery Boy only links the boy to the order. The order
-        // status is deliberately left untouched (CONFIRMED stays CONFIRMED), and
-        // starting preparation remains a separate, explicit step.
+        // Assigning only links the boy to the order (with a delivery date + slot).
+        // The order status is deliberately left untouched (CONFIRMED stays
+        // CONFIRMED); making it ready for pickup remains a separate step.
         showToast((res && res.message) || (assignIsReassign
             ? 'Delivery Boy reassigned successfully.'
             : 'Delivery Boy assigned successfully.'),
@@ -351,57 +282,97 @@ async function loadActiveDeliveryBoys() {
     return activeBoysCache;
 }
 
-function updateOrderStatus() {
-    const status = document.getElementById('om-status').value;
-    if (!selectedOrder) return;
+/* Status editor block inside the order modal. Rebuilt in place after a
+   successful update so the dropdown offers the transitions of the new state. */
+function statusEditorHtml(o) {
+    const nextStatuses = ORDER_TRANSITIONS[o.status] || [];
+    const canUpdate = nextStatuses.length > 0;
+    const terminalNote = !canUpdate ? terminalStatusNote(o.status) : '';
+    return `
+        <div class="row g-3 mb-3" id="om-status-editor">
+          <div class="col-md-6">
+            <label class="form-label">Status</label>
+            <select class="form-select form-control-fm" id="om-status" ${canUpdate ? '' : 'disabled'}>
+              <option value="${o.status}" selected>${o.status.replace(/_/g, ' ')}</option>
+              ${nextStatuses.map(s =>
+                  `<option value="${s}">${s.replace(/_/g, ' ')}</option>`).join('')}
+            </select>
+            ${terminalNote ? `<div class="form-text text-muted" style="font-size:0.78rem;">${terminalNote}</div>` : ''}
+            <div class="form-text" id="om-status-msg" style="font-size:0.78rem;"></div>
+          </div>
+          <div class="col-md-6 d-flex align-items-end">
+            <button class="btn-admin" id="om-update-btn" onclick="updateOrderStatus()" ${canUpdate ? '' : 'disabled'}><i class="fa-solid fa-floppy-disk me-1"></i>Update Status</button>
+          </div>
+        </div>`;
+}
+
+function terminalStatusNote(status) {
+    if (status === 'DELIVERED') return 'This order has been delivered and cannot be changed.';
+    if (status === 'OUT_FOR_DELIVERY') return 'This order is out for delivery and only the assigned Delivery Boy can mark it delivered.';
+    if (status === 'READY_FOR_PICKUP') return 'Pickup and delivery are handled by the assigned Delivery Boy.';
+    if (status === 'CANCELLED') return 'This order has been cancelled and cannot be changed.';
+    return '';
+}
+
+function setStatusMessage(message, type) {
+    const el = document.getElementById('om-status-msg');
+    if (!el) return;
+    const colors = { success: '#1e9e4a', error: '#b91c1c', muted: '#7a756d' };
+    el.textContent = message || '';
+    el.style.color = colors[type] || colors.muted;
+}
+
+/* Applies the transition immediately (no confirmation popup). On success the
+   modal's status editor and the order list are refreshed in place; failures are
+   reported inline inside the same modal. */
+async function updateOrderStatus() {
+    const select = document.getElementById('om-status');
+    const btn = document.getElementById('om-update-btn');
+    if (!selectedOrder || !select || !btn || statusUpdateInFlight) return;
+
+    const status = select.value;
     if (!status || status === selectedOrder.status) {
-        showToast('Please select a different status to update this order.', 'warning');
+        setStatusMessage('Please select a different status to update this order.', 'error');
         return;
     }
 
-    pendingOrderStatus = status;
-    document.getElementById('order-status-confirm-msg').innerHTML =
-        'Are you sure you want to change this order status to "<strong>' + status.replace(/_/g, ' ') + '</strong>"?';
-    ORDER_STATUS_MODAL.show();
-}
-
-async function confirmOrderStatusUpdate() {
-    const status = pendingOrderStatus;
-    if (!selectedOrder || !status) return;
-
-    pendingOrderStatus = null;
-    ORDER_STATUS_MODAL.hide();
-
-    const btn = document.getElementById('order-status-confirm-btn');
+    statusUpdateInFlight = true;
     btn.disabled = true;
     btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Updating...';
+    setStatusMessage('Updating status\u2026', 'muted');
 
     try {
         await apiCall('/api/admin/orders/' + selectedOrder.id + '/status', {
             method: 'PUT', body: { status }
         });
+        selectedOrder.status = status;
         delete assignOrderCache[selectedOrder.id];
-        const label = status.replace(/_/g, ' ').toLowerCase();
-        showToast(status === 'CANCELLED'
-            ? 'Order cancelled'
-            : 'Order status updated to ' + label + '.');
-        bootstrap.Modal.getInstance(document.getElementById('orderModal')).hide();
+
+        // Reflect the new state in the open modal...
+        const editor = document.getElementById('om-status-editor');
+        if (editor) editor.outerHTML = statusEditorHtml(selectedOrder);
+        setStatusMessage(status === 'CANCELLED'
+            ? 'Order cancelled.'
+            : 'Status updated to ' + status.replace(/_/g, ' ').toLowerCase() + '.', 'success');
+
+        // ...and refresh the matching row / filter results without a page reload.
         loadOrders();
     } catch (e) {
         if (e.status === 401 || e.status === 403) {
             Auth.requireAdmin();
-        } else {
-            // The server rejected the step (e.g. CONFIRMED -> PREPARING without a
-            // confirmed Delivery Boy). Show its message and put the dropdown back
-            // on the order's real status so the modal never shows a status the
-            // order is not in.
-            showToast(e.message, 'error', { title: 'Cannot Update Status' });
-            const select = document.getElementById('om-status');
-            if (select) select.value = selectedOrder.status;
+            return;
         }
-    } finally {
+        // The server rejected the step (e.g. CONFIRMED -> PREPARING without a
+        // confirmed Delivery Boy). Show its message and put the dropdown back on
+        // the order's real status so the modal never shows an unsaved status.
+        select.value = selectedOrder.status;
+        setStatusMessage(e.message || 'Could not update the status.', 'error');
+        // The editor is rebuilt only on success, so the original button still
+        // exists here and must be restored for another attempt.
         btn.disabled = false;
-        btn.innerHTML = 'Update Status';
+        btn.innerHTML = '<i class="fa-solid fa-floppy-disk me-1"></i>Update Status';
+    } finally {
+        statusUpdateInFlight = false;
     }
 }
 

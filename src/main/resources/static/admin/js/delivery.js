@@ -3,10 +3,9 @@
 let deliveryRows = [];
 let deliveryBoys = [];
 let assignModal = null;
-let detailModal = null;
+let orderModal = null;
 let assignOrderId = null;
 let assignIsReassign = false;
-let deliveryModalOrder = null;
 
 document.addEventListener('DOMContentLoaded', function () {
     if (!initAdminPage('delivery', 'Delivery Management', 'Assign delivery boys and track every order')) return;
@@ -122,7 +121,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
     // Blur before Bootstrap flips aria-hidden, otherwise the browser console
     // warns about an aria-hidden element still holding focus.
-    ['assignModal', 'detailModal'].forEach(id => {
+    ['assignModal', 'orderModal'].forEach(id => {
         document.getElementById(id).addEventListener('hidden.bs.modal', () => {
             const el = document.getElementById(id);
             if (el.contains(document.activeElement)) document.activeElement.blur();
@@ -191,9 +190,11 @@ function renderTable() {
         return;
     }
 
-    // A Delivery Boy is confirmed (or reassigned) while the parcel is still in
-    // the store: CONFIRMED, or PREPARING before the delivery starts.
-    const assignable = o => o.status === 'CONFIRMED' || o.status === 'PREPARING';
+    // A Delivery Boy is assigned (or reassigned) at readiness: once the order is
+    // CONFIRMED and still in the store (PREPARING / READY_FOR_PICKUP), before the
+    // boy confirms the pickup. READY_FOR_PICKUP cannot exist without an assignment,
+    // so it only ever surfaces the reassign button.
+    const assignable = o => o.status === 'CONFIRMED' || o.status === 'PREPARING' || o.status === 'READY_FOR_PICKUP';
     const hasBoy = o => o.delivery && o.delivery.deliveryBoyId;
 
     body.innerHTML = `
@@ -214,7 +215,7 @@ function renderTable() {
       <tbody>
         ${deliveryRows.map(o => `
         <tr>
-          <td>
+          <td class="row-clickable" onclick="openOrderDetails(${o.id})" title="View order details">
             <strong class="small">${escapeHtml(o.orderNumber)}</strong>
             <div class="text-muted" style="font-size:0.72rem;">${fmtDateOnly(o.createdAt)}</div>
           </td>
@@ -223,7 +224,12 @@ function renderTable() {
             <div class="text-muted" style="font-size:0.72rem;">${escapeHtml(o.customerPhone || '-')}</div>
           </td>
           <td style="max-width:230px;font-size:0.78rem;">${escapeHtml(addressOneLine(o))}</td>
-          <td style="font-size:0.78rem;">${escapeHtml(o.deliverySlot || '-')}</td>
+          <td style="font-size:0.78rem;">
+            ${escapeHtml(o.deliverySlot || '-')}
+            ${o.delivery && o.delivery.deliveryDate
+              ? '<div class="text-muted" style="font-size:0.7rem;"><i class="fa-solid fa-calendar-days me-1"></i>' + escapeHtml(o.delivery.deliveryDate) + ' ' + escapeHtml(o.delivery.deliverySlot || '') + '</div>'
+              : ''}
+          </td>
           <td class="text-end small fw-semibold">${fmtMoney(o.grandTotal)}</td>
           <td>${paymentCellHtml(o)}</td>
           <td style="font-size:0.78rem;">
@@ -231,7 +237,7 @@ function renderTable() {
               ? escapeHtml(o.delivery.deliveryBoyName) + (o.delivery.deliveryBoyActive === false ? ' <span class="badge-status INACTIVE" style="font-size:0.6rem;">Inactive</span>' : '')
               : '<span class="text-muted">Unassigned</span>'}
           </td>
-          <td>
+          <td class="row-clickable" onclick="openOrderDetails(${o.id})" title="View order details">
             <div class="d-flex flex-wrap gap-1">
               ${adminStatusBadge(o.status)}
               ${deliveryStateBadge((o.delivery && o.delivery.state) || 'PENDING_ASSIGNMENT')}
@@ -239,7 +245,7 @@ function renderTable() {
           </td>
           <td>
             <div class="d-flex justify-content-end gap-1">
-              <button class="btn-icon-xs" onclick="openDeliveryDetail(${o.id})" title="View Delivery Details">
+              <button class="btn-icon-xs" onclick="openOrderDetails(${o.id})" title="View Order Details">
                 <i class="fa-solid fa-eye"></i>
               </button>
               ${assignable(o) && !hasBoy(o)
@@ -301,6 +307,18 @@ async function openAssignModal(orderId, isReassign) {
             : 'Only active Delivery Boys are listed.';
     }
 
+    // Delivery date + slot default to today; the dropdown only offers the
+    // weekday/weekend slots a customer could have picked. Both are required.
+    // On a reassign the previous date + slot are kept so an operator can swap
+    // the boy without silently rescheduling the order.
+    setupAssignSchedule('as-date', 'as-slot');
+    if (isReassign && order.delivery && order.delivery.deliveryDate) {
+        const dateInput = document.getElementById('as-date');
+        dateInput.value = order.delivery.deliveryDate;
+        dateInput.dispatchEvent(new Event('change'));
+        document.getElementById('as-slot').value = order.delivery.deliverySlot || '';
+    }
+
     document.getElementById('as-confirm').innerHTML = isReassign
         ? '<i class="fa-solid fa-user-clock me-1"></i>Reassign'
         : '<i class="fa-solid fa-user-plus me-1"></i>Assign';
@@ -311,7 +329,11 @@ async function openAssignModal(orderId, isReassign) {
 
 async function confirmAssign() {
     const boyId = document.getElementById('as-boy').value;
+    const date = document.getElementById('as-date').value;
+    const slot = document.getElementById('as-slot').value;
     if (!boyId) return showToast('Please select a Delivery Boy.', 'warning');
+    if (!date) return showToast('Please select a delivery date.', 'warning');
+    if (!slot) return showToast('Please select a delivery slot.', 'warning');
 
     const btn = document.getElementById('as-confirm');
     btn.disabled = true;
@@ -319,7 +341,7 @@ async function confirmAssign() {
     try {
         const res = await apiCall('/api/admin/delivery/' + assignOrderId + (assignIsReassign ? '/reassign' : '/assign'), {
             method: assignIsReassign ? 'PUT' : 'POST',
-            body: { deliveryBoyId: Number(boyId) }
+            body: { deliveryBoyId: Number(boyId), deliveryDate: date, deliverySlot: slot }
         });
         assignModal.hide();
         showToast((res && res.message) || (assignIsReassign ? 'Delivery Boy reassigned.' : 'Delivery Boy assigned.'));
@@ -339,107 +361,54 @@ document.addEventListener('click', function (e) {
     if (e.target.closest('#as-confirm')) confirmAssign();
 });
 
-/* ---------------- Delivery detail ---------------- */
+/* ---------------- Order details (shared with the Orders page) ---------------- */
 
-async function openDeliveryDetail(orderId) {
-    const el = document.getElementById('dt-body');
-    el.innerHTML = spinnerHtml();
-    if (!detailModal) detailModal = new bootstrap.Modal(document.getElementById('detailModal'));
-    detailModal.show();
+/**
+ * Opens the shared Order Details modal for a delivery-board order. It loads the
+ * full order (products, cutting, customer, address, totals, payment and the
+ * delivery block with the assigned Delivery Boy + scheduled slot + handover
+ * history) from the admin delivery API and wires the Assign / Reassign buttons
+ * into this page's existing assignment modal.
+ */
+async function openOrderDetails(orderId) {
+    if (!orderModal) orderModal = new bootstrap.Modal(document.getElementById('orderModal'));
+    const numberEl = document.getElementById('om-number');
+    const body = document.getElementById('om-body');
+    numberEl.textContent = '';
+    body.innerHTML = spinnerHtml();
+    orderModal.show();
 
     try {
         const res = await apiCall('/api/admin/delivery/' + orderId);
-        deliveryModalOrder = res.data;
-        renderDeliveryDetail(deliveryModalOrder);
+        const o = res.data;
+        numberEl.textContent = o.orderNumber;
+        body.innerHTML = orderDetailSectionsHtml(o, {});
+
+        // The delivery panel renders the Assign / Reassign controls. Hand over to
+        // the assignment modal only once this one has fully hidden so Bootstrap
+        // never stacks two backdrops.
+        body.querySelectorAll('[data-delivery-assign]').forEach(btn =>
+            btn.addEventListener('click', () => openAssignFromDetails(Number(btn.dataset.deliveryAssign), false)));
+        body.querySelectorAll('[data-delivery-reassign]').forEach(btn =>
+            btn.addEventListener('click', () => openAssignFromDetails(Number(btn.dataset.deliveryReassign), true)));
     } catch (e) {
-        if (e.status === 401 || e.status === 403) return Auth.requireAdmin();
-        el.innerHTML = emptyBoxHtml(e.message || 'Could not load this delivery.');
+        if (e.status === 401 || e.status === 403) {
+            orderModal.hide();
+            Auth.requireAdmin();
+            return;
+        }
+        body.innerHTML = emptyBoxHtml(e.message || 'Could not load this order.');
     }
 }
 
-function renderDeliveryDetail(o) {
-    const d = o.delivery || {};
-    document.getElementById('dt-order-no').textContent = o.orderNumber;
-
-    const history = (d.history || []).slice().reverse();
-    const canAssign = (o.status === 'CONFIRMED' || o.status === 'PREPARING') && !d.deliveryBoyId;
-    const canReassign = (o.status === 'CONFIRMED' || o.status === 'PREPARING') && !!d.deliveryBoyId;
-
-    document.getElementById('dt-body').innerHTML = `
-    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
-      <div>
-        ${adminStatusBadge(o.status)}
-        ${deliveryStateBadge(d.state)}
-      </div>
-      <div style="font-size:0.8rem;" class="text-muted">Placed ${fmtDate(o.createdAt)}</div>
-    </div>
-
-    <div class="row g-3">
-      <div class="col-md-6">
-        <div class="form-label mb-1"><i class="fa-solid fa-user me-1"></i>Customer</div>
-        <div style="font-size:0.9rem;">
-          <strong>${escapeHtml(o.customerName || '-')}</strong><br>
-          <span class="text-muted">${escapeHtml(o.customerPhone || '-')}</span>
-        </div>
-        <div class="form-label mt-3 mb-1"><i class="fa-solid fa-location-dot me-1"></i>Delivery Address</div>
-        <div style="font-size:0.9rem;">${addressBlockHtml(o)}</div>
-        <div class="text-muted mt-1" style="font-size:0.8rem;">
-          <i class="fa-regular fa-clock me-1"></i>${escapeHtml(o.deliverySlot || 'No preferred slot')}
-        </div>
-      </div>
-      <div class="col-md-6">
-        <div class="form-label mb-1"><i class="fa-solid fa-indian-rupee-sign me-1"></i>Payment</div>
-        <div style="font-size:0.9rem;">
-          ${escapeHtml((o.paymentMethod || '-').replace(/_/g, ' '))} &middot; ${paymentBadgeHtml(o)}<br>
-          <strong class="d-inline-block mt-1">${fmtMoney(o.grandTotal)}</strong>
-          ${o.paidAt ? '<br><span class="text-muted" style="font-size:0.78rem;">Paid ' + fmtDate(o.paidAt) + '</span>' : ''}
-        </div>
-        <div class="form-label mt-3 mb-1"><i class="fa-solid fa-id-badge me-1"></i>Delivery Boy</div>
-        <div style="font-size:0.9rem;">
-          ${d.deliveryBoyName
-            ? '<strong>' + escapeHtml(d.deliveryBoyName) + '</strong>' + (d.deliveryBoyPhone ? ' <span class="text-muted" style="font-size:0.8rem;">' + escapeHtml(d.deliveryBoyPhone) + '</span>' : '')
-            : '<span class="text-muted">Not assigned</span>'}
-        </div>
-        <div class="text-muted mt-1" style="font-size:0.78rem;">
-          ${d.assignedAt ? '<div>Assigned: ' + fmtDate(d.assignedAt) + '</div>' : ''}
-          ${d.startedAt ? '<div>Started: ' + fmtDate(d.startedAt) + '</div>' : ''}
-          ${d.completedAt ? '<div>Delivered: ' + fmtDate(d.completedAt) + '</div>' : ''}
-        </div>
-      </div>
-    </div>
-
-    <div class="mt-3 pt-3 border-top">
-      <div class="form-label mb-2"><i class="fa-solid fa-clock-rotate-left me-1"></i>Delivery History</div>
-      ${history.length ? `<ul class="list-unstyled mb-0" style="font-size:0.85rem;">
-        ${history.map(h => `
-          <li class="mb-2 pb-2 border-bottom">
-            <div class="d-flex justify-content-between align-items-center gap-2">
-              <strong>${escapeHtml(h.deliveryBoyName || '-')}</strong>
-              <span class="badge-status ${h.status === 'COMPLETED' ? 'DELIVERED' : (h.status === 'REASSIGNED' ? 'CANCELLED' : 'CONFIRMED')}">${escapeHtml(String(h.status || '').replace(/_/g, ' '))}</span>
-            </div>
-            <div class="text-muted" style="font-size:0.75rem;">
-              Assigned ${fmtDate(h.assignedAt)}
-              ${h.startedAt ? ' &middot; Started ' + fmtDate(h.startedAt) : ''}
-              ${h.completedAt ? ' &middot; Delivered ' + fmtDate(h.completedAt) : ''}
-              ${h.assignedBy ? ' &middot; by ' + escapeHtml(h.assignedBy) : ''}
-            </div>
-          </li>`).join('')}
-      </ul>` : '<div class="text-muted" style="font-size:0.85rem;">No delivery activity yet.</div>'}
-    </div>
-
-    ${canAssign || canReassign ? `
-      <div class="mt-3 pt-3 border-top">
-        <button class="btn-admin" id="dt-assign-btn">
-          <i class="fa-solid ${canAssign ? 'fa-user-plus' : 'fa-user-clock'} me-1"></i>${canAssign ? 'Assign Delivery Boy' : 'Reassign Delivery Boy'}
-        </button>
-      </div>` : ''}`;
-
-    const btn = document.getElementById('dt-assign-btn');
-    if (btn) {
-        btn.addEventListener('click', () => {
-            detailModal.hide();
-            document.getElementById('detailModal').addEventListener('hidden.bs.modal',
-                () => openAssignModal(o.id, !!canReassign), { once: true });
-        });
+function openAssignFromDetails(orderId, isReassign) {
+    const modalEl = document.getElementById('orderModal');
+    const inst = bootstrap.Modal.getInstance(modalEl);
+    const open = () => openAssignModal(orderId, isReassign);
+    if (inst && modalEl.classList.contains('show')) {
+        modalEl.addEventListener('hidden.bs.modal', open, { once: true });
+        inst.hide();
+    } else {
+        open();
     }
 }

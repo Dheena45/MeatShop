@@ -4,10 +4,54 @@
 
 const API_BASE = '';
 
+/* Per-role localStorage keys. Customer keeps the original keys untouched.
+   Admin and Delivery Boy tokens/users are stored under their own keys so the
+   three sessions can coexist in the same browser without overwriting each
+   other. Never change a key here without checking all login/save/clear paths. */
+const AUTH_KEYS = {
+    customer: { token: 'fm_token', user: 'fm_user' },
+    admin:    { token: 'freshmeat_admin_token', user: 'freshmeat_admin_user' },
+    delivery: { token: 'freshmeat_delivery_token', user: 'freshmeat_delivery_user' }
+};
+
+/* Server role -> storage bucket. Unknown roles (e.g. customers) -> customer. */
+const AUTH_ROLE_BY_USER_ROLE = {
+    ADMIN: 'admin',
+    DELIVERY_BOY: 'delivery'
+};
+
+/* Which role the CURRENT page belongs to. Defaults to the store (customer)
+   view; admin pages and the delivery dashboard switch this via setRole. */
+let FM_AUTH_ROLE = 'customer';
+
 const Auth = {
-    getToken() { return localStorage.getItem('fm_token'); },
+    /* ---------- Role-scoped storage ----------
+       Admin, Delivery Boy and Customer sessions live under separate
+       localStorage keys, so logging in as one role never overwrites or logs
+       out another role. A page fixes its role context once (the default is
+       'customer'; admin pages switch to 'admin' and the delivery dashboard to
+       'delivery'), and Auth only ever reads/writes/clears that role's keys.
+       The server-returned role (from the JWT) decides which keys a login is
+       stored under, and requireAdmin()/requireDeliveryBoy() set the page
+       context. The backend still re-checks role + token on every request. */
+    role() { return FM_AUTH_ROLE; },
+
+    setRole(role) {
+        if (AUTH_KEYS[role]) FM_AUTH_ROLE = role;
+        return this;
+    },
+
+    keys(role) { return AUTH_KEYS[role || FM_AUTH_ROLE]; },
+
+    roleKeyForUser(user) {
+        return AUTH_ROLE_BY_USER_ROLE[user && user.role] || 'customer';
+    },
+
+    getToken() {
+        return localStorage.getItem(this.keys().token);
+    },
     getUser() {
-        try { return JSON.parse(localStorage.getItem('fm_user')); }
+        try { return JSON.parse(localStorage.getItem(this.keys().user)); }
         catch (e) { return null; }
     },
     isLoggedIn() { return !!this.getToken(); },
@@ -19,13 +63,23 @@ const Auth = {
         const u = this.getUser();
         return u && u.role === 'DELIVERY_BOY';
     },
+    /* Saves ONLY the role's own keys. The storage role is taken from the
+       user's role (always the server-returned role), so an admin or delivery
+       boy logging in through the shared login page lands in their own keys
+       without touching any other role's session. */
     save(token, user) {
-        localStorage.setItem('fm_token', token);
-        localStorage.setItem('fm_user', JSON.stringify(user));
+        const keys = this.keys(this.roleKeyForUser(user));
+        if (token) localStorage.setItem(keys.token, token);
+        localStorage.setItem(keys.user, JSON.stringify(user || {}));
+        return this;
     },
-    clear() {
-        localStorage.removeItem('fm_token');
-        localStorage.removeItem('fm_user');
+    /* Clears ONLY the given role (or the page role). Logging out one role
+       never logs out another. */
+    clear(role) {
+        const keys = this.keys(role || FM_AUTH_ROLE);
+        localStorage.removeItem(keys.token);
+        localStorage.removeItem(keys.user);
+        return this;
     },
     requireLogin() {
         if (!this.isLoggedIn()) {
@@ -35,8 +89,11 @@ const Auth = {
         return true;
     },
     requireAdmin() {
+        // Admin pages always operate on the ADMIN session — never the
+        // delivery/customer session, even if one is active in another tab.
+        this.setRole('admin');
         if (!this.isLoggedIn() || !this.isAdmin()) {
-            window.location.href = '/login.html?redirect=' + encodeURIComponent('/admin/dashboard.html');
+            window.location.href = '/login.html?role=admin&redirect=' + encodeURIComponent('/admin/dashboard.html');
             return false;
         }
         return true;
@@ -47,8 +104,10 @@ const Auth = {
      * for a DELIVERY_BOY token.
      */
     requireDeliveryBoy() {
+        // Delivery pages always operate on the DELIVERY_BOY session.
+        this.setRole('delivery');
         if (!this.isLoggedIn()) {
-            window.location.href = '/login.html?redirect=' + encodeURIComponent('/delivery/dashboard.html');
+            window.location.href = '/login.html?role=delivery&redirect=' + encodeURIComponent('/delivery/dashboard.html');
             return false;
         }
         if (this.isAdmin()) {

@@ -27,25 +27,6 @@
   </div>
 </div>
 
-<!-- Order status update confirmation modal -->
-<div class="modal fade" id="orderStatusModal" tabindex="-1" aria-labelledby="orderStatusModalLabel" aria-hidden="true">
-  <div class="modal-dialog modal-dialog-centered">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h5 class="modal-title" id="orderStatusModalLabel"><i class="fa-solid fa-triangle-exclamation text-warning me-2"></i>Update Order Status</h5>
-        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-      </div>
-      <div class="modal-body">
-        <p class="mb-0" id="order-status-confirm-msg">Are you sure you want to change this order status?</p>
-      </div>
-      <div class="modal-footer">
-        <button type="button" class="btn-admin-outline" data-bs-dismiss="modal">Cancel</button>
-        <button type="button" class="btn-admin" id="order-status-confirm-btn">Update Status</button>
-      </div>
-    </div>
-  </div>
-</div>
-
 <!-- Mark payment received confirmation modal -->
 <div class="modal fade" id="paymentModal" tabindex="-1" aria-labelledby="paymentModalLabel" aria-hidden="true">
   <div class="modal-dialog modal-dialog-centered">
@@ -99,6 +80,17 @@
         <label class="form-label" for="assign-boy-select">Delivery Boy</label>
         <select class="form-select form-control-fm" id="assign-boy-select"></select>
         <div class="form-text text-muted" style="font-size:0.75rem;">Only active Delivery Boys are listed.</div>
+        <div class="row g-2 mt-2">
+          <div class="col-6">
+            <label class="form-label" for="assign-date">Delivery Date</label>
+            <input type="date" class="form-control form-control-fm" id="assign-date">
+          </div>
+          <div class="col-6">
+            <label class="form-label" for="assign-slot">Delivery Slot</label>
+            <select class="form-select form-control-fm" id="assign-slot"></select>
+          </div>
+        </div>
+        <div class="form-text text-muted" style="font-size:0.75rem;">The slot list follows the weekday/weekend rules the customer saw at checkout.</div>
       </div>
       <div class="modal-footer">
         <button type="button" class="btn-admin-outline" data-bs-dismiss="modal">Cancel</button>

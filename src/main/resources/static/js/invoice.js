@@ -6,6 +6,11 @@
     const isAdmin = params.get('admin') === '1';
     const autoPrint = params.get('print') === '1';
 
+    // Admin-mode invoices must read/send the ADMIN session even though the
+    // page also serves customers (the role used on this page is page-scoped
+    // only; it never touches other roles' keys).
+    if (isAdmin) Auth.setRole('admin');
+
     if (!orderId) {
         document.getElementById('invoice-root').innerHTML = errorHtml('Missing order reference.');
         return;
@@ -41,7 +46,7 @@
             if (autoPrint) window.print();
         } catch (e) {
             if (e.status === 401 || e.status === 403) {
-                if (isAdmin) { Auth.requireAdmin(); Auth.clear(); window.location.href = '/login.html'; }
+                if (isAdmin) { Auth.requireAdmin(); Auth.clear(); window.location.href = '/login.html?role=admin'; }
                 else { Auth.clear(); window.location.href = '/login.html?redirect=' + encodeURIComponent('/invoice.html?order=' + orderId); }
                 return;
             }

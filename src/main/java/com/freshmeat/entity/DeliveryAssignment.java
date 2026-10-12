@@ -7,6 +7,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 /**
@@ -53,6 +54,18 @@ public class DeliveryAssignment {
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     private DeliveryAssignmentStatus status = DeliveryAssignmentStatus.ASSIGNED;
+
+    /**
+     * The delivery date the admin selected when handing the order over. Stored on
+     * the assignment (not recomputed from the order) so historical records keep
+     * the exact date/slot that was promised, even if the customer's checkout slot
+     * or the calendar changes later. Plain {@link LocalDate} — no timezone shift.
+     */
+    @Column(name = "delivery_date")
+    private LocalDate deliveryDate;
+
+    @Column(name = "delivery_slot", length = 30)
+    private String deliverySlot;
 
     @Column(name = "assigned_at", nullable = false)
     private LocalDateTime assignedAt;

@@ -17,6 +17,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
@@ -70,7 +71,18 @@ public class DeliveryBoyController {
         return ResponseEntity.ok(ApiResponse.ok(deliveryService.myDeliveryDetail(orderId)));
     }
 
-    /** Start delivery: allowed only from PREPARING, which moves the order to OUT_FOR_DELIVERY. */
+    /**
+     * Confirm pickup: allowed only once the order is READY_FOR_PICKUP, which
+     * moves it to OUT_FOR_DELIVERY and records the pickup time. This is the
+     * physical hand-over at the shop, not a status an admin can set.
+     */
+    @PutMapping("/{orderId}/pickup")
+    public ResponseEntity<ApiResponse<OrderDTO>> confirmPickup(@PathVariable Long orderId) {
+        return ResponseEntity.ok(ApiResponse.ok(
+                "Pickup confirmed. Order is out for delivery.", deliveryService.startDelivery(orderId)));
+    }
+
+    /** Backwards-compatible alias of {@code /pickup}; same server-side rules apply. */
     @PutMapping("/{orderId}/start")
     public ResponseEntity<ApiResponse<OrderDTO>> startDelivery(@PathVariable Long orderId) {
         return ResponseEntity.ok(ApiResponse.ok(
@@ -95,9 +107,24 @@ public class DeliveryBoyController {
     @PutMapping("/{orderId}/payment-received")
     public ResponseEntity<ApiResponse<OrderDTO>> collectCash(
             @PathVariable Long orderId,
-            @RequestBody(required = false) Map<String, String> body) {
-        String transactionRef = body != null ? body.get("transactionRef") : null;
+            @RequestBody(required = false) Map<String, Object> body) {
+        String transactionRef = body != null && body.get("transactionRef") != null
+                ? String.valueOf(body.get("transactionRef")) : null;
+        BigDecimal amount = parseAmount(body != null ? body.get("amount") : null);
         return ResponseEntity.ok(ApiResponse.ok(
-                "Payment received successfully.", deliveryService.collectCash(orderId, transactionRef)));
+                "Payment received successfully.",
+                deliveryService.collectCash(orderId, transactionRef, amount)));
+    }
+
+    /** Optional cash amount. A blank / absent value means "the order total". */
+    private BigDecimal parseAmount(Object raw) {
+        if (raw == null || String.valueOf(raw).isBlank()) {
+            return null;
+        }
+        try {
+            return new BigDecimal(String.valueOf(raw).trim());
+        } catch (NumberFormatException ex) {
+            throw new com.freshmeat.exception.BadRequestException("Enter a valid cash amount.");
+        }
     }
 }

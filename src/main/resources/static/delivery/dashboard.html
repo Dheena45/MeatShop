@@ -79,6 +79,65 @@
 
 <div class="db-toast" id="db-toast" role="status" aria-live="polite" hidden></div>
 
+<!-- Cash collection confirmation modal -->
+<div class="db-sheet-backdrop" id="cash-backdrop" hidden></div>
+<div class="db-cash-modal" id="cash-modal" role="dialog" aria-modal="true" aria-labelledby="cash-modal-title" hidden>
+    <div class="db-cash-modal-head">
+        <h2 id="cash-modal-title"><i class="fa-solid fa-money-bill-wave me-1"></i>Collect Cash</h2>
+        <button class="db-icon-btn" id="cash-modal-close" aria-label="Close">
+            <i class="fa-solid fa-xmark"></i>
+        </button>
+    </div>
+    <div class="db-cash-modal-body">
+        <div class="db-cash-modal-row">
+            <span class="db-cash-modal-label">Order</span>
+            <span class="db-cash-modal-value" id="cash-modal-order">#---</span>
+        </div>
+        <div class="db-cash-modal-row">
+            <span class="db-cash-modal-label">Customer</span>
+            <span class="db-cash-modal-value" id="cash-modal-customer">-</span>
+        </div>
+        <div class="db-cash-modal-row">
+            <span class="db-cash-modal-label">Payment method</span>
+            <span class="db-cash-modal-value" id="cash-modal-method">Cash on Delivery</span>
+        </div>
+        <div class="db-cash-modal-amount">
+            <span class="db-cash-modal-label">Amount to collect</span>
+            <strong id="cash-modal-amount">--</strong>
+        </div>
+        <p class="db-cash-modal-question">Did you collect the full cash amount from the customer?</p>
+        <div class="db-inline-msg" id="cash-modal-msg" hidden></div>
+    </div>
+    <div class="db-cash-modal-foot">
+        <button class="db-btn db-btn-ghost" id="cash-modal-cancel">Cancel</button>
+        <button class="db-btn db-btn-gold" id="cash-confirm-btn">
+            <i class="fa-solid fa-money-bill-wave"></i>Confirm Cash Collected
+        </button>
+    </div>
+</div>
+
+<!-- Cash-not-collected warning modal (shown when Mark Delivered is tapped while
+     a COD payment is still pending; the actual grand total is injected by JS) -->
+<div class="db-sheet-backdrop" id="warn-backdrop" hidden></div>
+<div class="db-cash-modal" id="warn-modal" role="dialog" aria-modal="true" aria-labelledby="warn-modal-title" hidden>
+    <div class="db-cash-modal-head">
+        <h2 id="warn-modal-title"><i class="fa-solid fa-triangle-exclamation me-1" style="color:#B45309;"></i>Cash Not Collected</h2>
+        <button class="db-icon-btn" id="warn-modal-close" aria-label="Close">
+            <i class="fa-solid fa-xmark"></i>
+        </button>
+    </div>
+    <div class="db-cash-modal-body">
+        <p class="db-warn-modal-msg" id="warn-modal-msg">Cash has not been collected yet.</p>
+        <p class="db-warn-modal-sub">Please collect the cash payment first. Click Collect Cash to open the payment form.</p>
+    </div>
+    <div class="db-cash-modal-foot">
+        <button class="db-btn db-btn-ghost" id="warn-cancel">Cancel</button>
+        <button class="db-btn db-btn-gold" id="warn-collect">
+            <i class="fa-solid fa-money-bill-wave"></i>Collect Cash
+        </button>
+    </div>
+</div>
+
 <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.3/js/bootstrap.bundle.min.js"></script>
 <script src="/js/app.js"></script>
 <script src="/delivery/js/dashboard.js"></script>

@@ -72,20 +72,15 @@ public class OrderService {
 
     // Admin status updates must move forward exactly one step on the happy-path
     // sequence; every other transition (jumping ahead, going back, cancelling
-    // via status update) is rejected with a 409 Conflict. Cash-on-delivery
-    // orders are CONFIRMED as soon as they are placed; online orders stay in
-    // PLACED until their payment is confirmed, then move onto the same
-    // fulfilment sequence:
+    // via status update) is rejected with a 409 Conflict. Every order is created
+    // PLACED: online orders stay there until the payment gateway confirms payment
+    // (confirmOnlinePayment), COD orders stay there until the admin confirms
+    // them. Both then follow the same fulfilment sequence:
     //   PLACED -> CONFIRMED -> PREPARING -> READY_FOR_PICKUP
     //          -> OUT_FOR_DELIVERY -> DELIVERED
+    // READY_FOR_PICKUP -> OUT_FOR_DELIVERY and OUT_FOR_DELIVERY -> DELIVERED are
+    // the two hand-over steps reserved for the assigned Delivery Boy.
     private static final Map<OrderStatus, OrderStatus> NEXT_STATUS = new EnumMap<>(OrderStatus.class);
-
-    /**
-     * Assignment rows that count as "an active Delivery Boy is confirmed for
-     * this order" when the CONFIRMED -> PREPARING gate is evaluated.
-     */
-    private static final EnumSet<DeliveryAssignmentStatus> ACTIVE_ASSIGNMENT_STATUSES =
-            EnumSet.of(DeliveryAssignmentStatus.ASSIGNED, DeliveryAssignmentStatus.STARTED);
 
     static {
         NEXT_STATUS.put(OrderStatus.PLACED, OrderStatus.CONFIRMED);
@@ -156,6 +151,7 @@ public class OrderService {
             BigDecimal lineTotal = item.getUnitPrice().multiply(BigDecimal.valueOf(item.getQuantity()));
             oi.setSubtotal(lineTotal);
             orderItemRepository.save(oi);
+            order.getItems().add(oi);
 
             product.setStockQuantity(product.getStockQuantity() - item.getQuantity());
             productRepository.save(product);
@@ -163,9 +159,11 @@ public class OrderService {
 
         PaymentMethod method = parsePaymentMethod(request.getPaymentMethod());
 
-        // COD is confirmed at the counter. Online orders are NOT confirmed until
-        // the payment gateway confirms success (confirmOnlinePayment).
-        order.setStatus(method == PaymentMethod.ONLINE ? OrderStatus.PLACED : OrderStatus.CONFIRMED);
+        // Every order is created PLACED. An online order stays here until the
+        // payment gateway confirms success (confirmOnlinePayment); a COD order
+        // stays here until the admin confirms it. COD payment itself is always
+        // created PENDING and only becomes PAID when cash is collected at the door.
+        order.setStatus(OrderStatus.PLACED);
         order = orderRepository.save(order);
 
         order.setPayment(paymentService.createPayment(order, method, order.getGrandTotal()));
@@ -262,8 +260,28 @@ public class OrderService {
         }
     }
 
+    /**
+     * Admin status transition. Admins drive the order up to READY_FOR_PICKUP
+     * (confirm, start preparation, mark ready) and may cancel, but the two
+     * hand-over steps — OUT_FOR_DELIVERY and DELIVERED — are deliberately
+     * rejected here so only the assigned Delivery Boy can perform them.
+     */
     @Transactional
     public OrderDTO updateOrderStatus(Long orderId, OrderStatus newStatus) {
+        return changeOrderStatus(orderId, newStatus, false);
+    }
+
+    /**
+     * Delivery-boy-only transition path. Reached only through
+     * {@link DeliveryService}, which first verifies the caller owns the open
+     * assignment; the admin endpoint never calls this.
+     */
+    @Transactional
+    public OrderDTO applyDeliveryBoyStatusChange(Long orderId, OrderStatus newStatus) {
+        return changeOrderStatus(orderId, newStatus, true);
+    }
+
+    private OrderDTO changeOrderStatus(Long orderId, OrderStatus newStatus, boolean deliveryBoyAction) {
         Order order = orderRepository.findById(orderId)
                 .orElseThrow(() -> new ResourceNotFoundException("Order not found"));
 
@@ -276,6 +294,14 @@ public class OrderService {
         // Re-applying the current status is a harmless no-op.
         if (current == newStatus) {
             return toDTO(order);
+        }
+
+        // Admin must NOT mark pickup or delivery; those belong to the assigned
+        // Delivery Boy. Enforced in the service, not just the UI.
+        if (!deliveryBoyAction
+                && (newStatus == OrderStatus.OUT_FOR_DELIVERY || newStatus == OrderStatus.DELIVERED)) {
+            throw new ConflictException(
+                    "Only the assigned Delivery Boy can confirm pickup or mark this order as delivered.");
         }
 
         // Admin cancellation of CONFIRMED / PREPARING / READY_FOR_PICKUP orders
@@ -313,23 +339,25 @@ public class OrderService {
             throw new ConflictException(message);
         }
 
-        // CONFIRMED -> PREPARING is the one step that is gated on more than the
-        // order status: an active Delivery Boy must already be confirmed for the
-        // order. This lives in the service, not in the UI, so a direct call to
-        // the admin status endpoint cannot skip the assignment.
-        if (current == OrderStatus.CONFIRMED && newStatus == OrderStatus.PREPARING) {
-            requireConfirmedDeliveryBoy(order);
-        }
+        // PREPARING -> READY_FOR_PICKUP is a pure preparation milestone: the
+        // store marks the parcel ready and only afterwards assigns the Delivery
+        // Boy (the assignment carries the delivery date + slot). The transition
+        // deliberately does NOT require an assignment here — the pickup action
+        // itself enforces that an active Delivery Boy owns the order, so an
+        // unassigned READY_FOR_PICKUP order simply stays in the Pending
+        // Assignment column until the admin hands it over.
 
-        // Payment status is deliberately independent of order status: a
-        // cash-on-delivery order can never be marked Delivered while its payment
-        // is still pending, and an online order can only get here once the
-        // gateway has confirmed it. Collecting cash and marking delivered stay
-        // two separate, explicit actions.
+        // Payment status is deliberately independent of order status, but every
+        // order must be PAID before it can be marked DELIVERED — for an admin
+        // as well as for the assigned Delivery Boy. A COD order only becomes
+        // PAID when the cash is explicitly collected ("Collect cash" / admin
+        // "Mark payment received"); delivering never silently flips an unpaid
+        // COD payment to PAID, it simply refuses until the money is recorded.
+        // An online order is already PAID by the gateway by that point.
         if (newStatus == OrderStatus.DELIVERED && order.getPayment() != null
                 && order.getPayment().getPaymentStatus() != PaymentStatus.PAID) {
             throw new ConflictException(order.getPayment().getPaymentMethod() == PaymentMethod.CASH_ON_DELIVERY
-                    ? "Cannot mark COD order as delivered until payment is received."
+                    ? "Please collect the cash payment before completing delivery."
                     : "Payment for this order must be completed before it can be delivered.");
         }
 
@@ -417,22 +445,6 @@ public class OrderService {
             }
         }
         return null;
-    }
-
-    /**
-     * Server-side gate for CONFIRMED -> PREPARING. The order must already carry
-     * an open assignment belonging to an enabled Delivery Boy; a deactivated boy
-     * does not count. Confirming the Delivery Boy is what links the boy to the
-     * order, and it deliberately leaves the order status untouched.
-     */
-    private void requireConfirmedDeliveryBoy(Order order) {
-        boolean confirmed = deliveryAssignmentRepository
-                .findOpenByOrderId(order.getId(), ACTIVE_ASSIGNMENT_STATUSES)
-                .stream()
-                .anyMatch(a -> a.getDeliveryBoy() != null && a.getDeliveryBoy().getEnabled());
-        if (!confirmed) {
-            throw new ConflictException("Please confirm a Delivery Boy before starting preparation.");
-        }
     }
 
     /**

@@ -2,6 +2,8 @@
 /* FreshMeat — Auth page controller (login + register) */
 
 document.addEventListener('DOMContentLoaded', function () {
+    applyRoleHint();
+
     const loginForm = document.getElementById('login-form');
     if (loginForm) {
         loginForm.addEventListener('submit', handleLogin);
@@ -28,6 +30,29 @@ document.addEventListener('DOMContentLoaded', function () {
         resetForm.addEventListener('submit', handleResetPassword);
     }
 });
+
+/* The shared login page serves all three roles. When a role-specific link
+   (admin logout, delivery logout, or a guard redirect) points here with
+   ?role=admin / ?role=delivery, adjust the heading so staff know which account
+   they are signing into. The actual role is always taken from the server's
+   login response and stored under that role's own keys. */
+function applyRoleHint() {
+    try {
+        const role = new URLSearchParams(window.location.search).get('role');
+        if (role !== 'admin' && role !== 'delivery') return;
+        const sub = document.querySelector('.auth-head p');
+        const title = document.querySelector('.auth-head h2');
+        if (sub) {
+            sub.textContent = role === 'admin'
+                ? 'Admin login. Use your staff account to manage FreshMeat.'
+                : 'Delivery partner login. Sign in to view your assigned deliveries.';
+        }
+        if (title) {
+            title.innerHTML = 'Fresh<span style="color:var(--gold-light)">' +
+                (role === 'admin' ? 'Meat Admin' : 'Meat Delivery') + '</span>';
+        }
+    } catch (e) { /* cosmetic only */ }
+}
 
 async function handleLogin(e) {
     e.preventDefault();

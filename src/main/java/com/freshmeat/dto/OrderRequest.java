@@ -17,7 +17,8 @@ public class OrderRequest {
     private String customerName;
 
     @NotBlank(message = "Phone is required")
-    @Pattern(regexp = "^[0-9]{10}$", message = "Phone must be 10 digits")
+    @Pattern(regexp = "^[6-9][0-9]{9}$",
+            message = "Enter a valid 10-digit mobile number starting with 6, 7, 8, or 9.")
     private String customerPhone;
 
     @NotBlank(message = "Email is required")

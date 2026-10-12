@@ -59,7 +59,7 @@ async function saveProfile() {
     try {
         const res = await apiCall('/api/profile', { method: 'PUT', body: { name, phone } });
         const user = Auth.getUser();
-        Auth.save(Auth.getToken(), { ...user, name });
+        Auth.save(Auth.getToken(), { ...user, name, phone });
         document.getElementById('profile-name').textContent = name;
         showToast('Profile updated!');
     } catch (e) {

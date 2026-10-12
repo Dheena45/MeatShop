@@ -57,13 +57,14 @@ public class DeliveryInfoMapper {
                     OrderStatus.OUT_FOR_DELIVERY, OrderStatus.DELIVERED));
 
     /**
-     * Order statuses a Delivery Boy can be assigned to: the admin confirms a boy
-     * on a {@code CONFIRMED} order (which is what unlocks PREPARING), and the
-     * order stays reassignable while it is still being PREPARED because the
-     * delivery has not left the store yet.
+     * Order statuses a Delivery Boy can be assigned or reassigned to: the admin
+     * can confirm a boy on a {@code CONFIRMED} order, usually once preparation is
+     * complete ({@code PREPARING}), and the order stays reassignable through
+     * {@code READY_FOR_PICKUP} because the parcel has not left the store until
+     * the boy confirms pickup.
      */
     public static final Set<OrderStatus> ASSIGNABLE_STATUSES = Collections.unmodifiableSet(
-            EnumSet.of(OrderStatus.CONFIRMED, OrderStatus.PREPARING));
+            EnumSet.of(OrderStatus.CONFIRMED, OrderStatus.PREPARING, OrderStatus.READY_FOR_PICKUP));
 
     @Autowired
     private DeliveryAssignmentRepository deliveryAssignmentRepository;
@@ -81,14 +82,25 @@ public class DeliveryInfoMapper {
         if (status == null || status == OrderStatus.CANCELLED || status == OrderStatus.PLACED) {
             return null;
         }
-        return switch (status) {
-            case DELIVERED -> DeliveryState.DELIVERED;
-            case OUT_FOR_DELIVERY -> DeliveryState.OUT_FOR_DELIVERY;
-            case READY_FOR_PICKUP, CONFIRMED, PREPARING -> hasOpenAssignment
-                    ? DeliveryState.ASSIGNED
-                    : DeliveryState.PENDING_ASSIGNMENT;
-            default -> null;
-        };
+        // Plain comparisons instead of a switch expression over the enum: the
+        // javac switch over an enum is routed through a synthetic switch-map
+        // class (DeliveryInfoMapper$1). If a build ever ships DeliveryInfoMapper
+        // without that synthetic class (broken incremental compile / IDE build),
+        // the JVM throws NoClassDefFoundError on this exact method and every
+        // read of a DELIVERED or OUT_FOR_DELIVERY order returns 500. If/else
+        // comparisons carry no such hidden dependency.
+        if (status == OrderStatus.DELIVERED) {
+            return DeliveryState.DELIVERED;
+        }
+        if (status == OrderStatus.OUT_FOR_DELIVERY) {
+            return DeliveryState.OUT_FOR_DELIVERY;
+        }
+        if (status == OrderStatus.READY_FOR_PICKUP
+                || status == OrderStatus.CONFIRMED
+                || status == OrderStatus.PREPARING) {
+            return hasOpenAssignment ? DeliveryState.ASSIGNED : DeliveryState.PENDING_ASSIGNMENT;
+        }
+        return null;
     }
 
     public DeliveryState stateOf(Order order) {
@@ -171,6 +183,8 @@ public class DeliveryInfoMapper {
         if (open != null) {
             info.setAssignmentId(open.getId());
             info.setAssignmentStatus(open.getStatus().name());
+            info.setDeliveryDate(open.getDeliveryDate());
+            info.setDeliverySlot(open.getDeliverySlot());
             info.setAssignedAt(open.getAssignedAt());
             info.setStartedAt(open.getStartedAt());
             info.setCompletedAt(open.getCompletedAt());
@@ -188,6 +202,8 @@ public class DeliveryInfoMapper {
             if (latest != null) {
                 info.setAssignmentId(latest.getId());
                 info.setAssignmentStatus(latest.getStatus().name());
+                info.setDeliveryDate(latest.getDeliveryDate());
+                info.setDeliverySlot(latest.getDeliverySlot());
                 info.setAssignedAt(latest.getAssignedAt());
                 info.setStartedAt(latest.getStartedAt());
                 info.setCompletedAt(latest.getCompletedAt());
@@ -220,12 +236,15 @@ public class DeliveryInfoMapper {
                 && payment.getPaymentStatus() != PaymentStatus.CANCELLED;
 
         info.setCanCollectCash(unpaidCod && order.getStatus() == OrderStatus.OUT_FOR_DELIVERY);
-        // Preparation is finished at this point, so this is the "take the order
-        // out for delivery" step: READY_FOR_PICKUP -> OUT_FOR_DELIVERY.
+        // The boy "confirms the pickup" at the store: the parcel is ready, so he
+        // takes it out for delivery. READY_FOR_PICKUP -> OUT_FOR_DELIVERY.
         info.setCanStart(order.getStatus() == OrderStatus.READY_FOR_PICKUP);
+        // Mark Delivered requires the payment to be PAID. For a COD order the
+        // boy has to record the cash through the separate "Collect cash" action
+        // first; an online order is already PAID by the gateway. Delivering must
+        // never mark an unpaid order as PAID by itself.
         info.setCanMarkDelivered(order.getStatus() == OrderStatus.OUT_FOR_DELIVERY
-                && payment != null
-                && payment.getPaymentStatus() == PaymentStatus.PAID);
+                && payment != null && payment.getPaymentStatus() == PaymentStatus.PAID);
     }
 
     public DeliveryAssignmentDTO toDto(DeliveryAssignment a) {
@@ -237,6 +256,8 @@ public class DeliveryInfoMapper {
         dto.setDeliveryBoyName(a.getDeliveryBoy() != null ? a.getDeliveryBoy().getName() : null);
         dto.setDeliveryBoyPhone(a.getDeliveryBoy() != null ? a.getDeliveryBoy().getPhone() : null);
         dto.setStatus(a.getStatus().name());
+        dto.setDeliveryDate(a.getDeliveryDate());
+        dto.setDeliverySlot(a.getDeliverySlot());
         dto.setAssignedAt(a.getAssignedAt());
         dto.setStartedAt(a.getStartedAt());
         dto.setCompletedAt(a.getCompletedAt());
