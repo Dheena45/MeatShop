@@ -7,3 +7,12 @@ target/
 app-err.log
 app-out.log
 .env
+
+# Node / frontend
+node_modules/
+frontend/dist/
+frontend/install.log
+frontend/*.local
+
+# Local-only backup of the pre-split project
+_backup_original/
