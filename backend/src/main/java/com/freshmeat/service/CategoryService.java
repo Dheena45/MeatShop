@@ -10,7 +10,6 @@ import com.freshmeat.repository.CategoryRepository;
 import com.freshmeat.repository.ProductRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.stream.Collectors;
@@ -38,8 +37,6 @@ public class CategoryService {
         return categoryRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Category not found"));
     }
-
-    @Transactional
     public CategoryDTO createCategory(CategoryDTO dto) {
         String name = dto.getName() == null ? null : dto.getName().trim();
         if (name == null || name.isBlank()) {
@@ -56,8 +53,6 @@ public class CategoryService {
         category = categoryRepository.save(category);
         return toDTO(category);
     }
-
-    @Transactional
     public CategoryDTO updateCategory(Long id, CategoryDTO dto) {
         Category category = getCategory(id);
         String name = dto.getName() == null ? null : dto.getName().trim();
@@ -76,8 +71,6 @@ public class CategoryService {
         category = categoryRepository.save(category);
         return toDTO(category);
     }
-
-    @Transactional
     public void deleteCategory(Long id) {
         Category category = getCategory(id);
         if (productRepository.countByCategoryId(id) > 0) {

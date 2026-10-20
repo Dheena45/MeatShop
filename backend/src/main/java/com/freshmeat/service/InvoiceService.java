@@ -21,7 +21,6 @@ import com.lowagie.text.pdf.PdfPTable;
 import com.lowagie.text.pdf.PdfWriter;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.awt.Color;
 import java.io.ByteArrayOutputStream;
@@ -51,8 +50,6 @@ public class InvoiceService {
 
     @Autowired
     private ContactSettingsService contactSettingsService;
-
-    @Transactional
     public InvoiceDTO getOrCreate(Long orderId) {
         Invoice invoice = invoiceRepository.findByOrderId(orderId)
                 .orElseGet(() -> createInvoice(orderId));
@@ -70,7 +67,7 @@ public class InvoiceService {
                     Order order = orderRepository.findById(orderId)
                             .orElseThrow(() -> new ResourceNotFoundException("Order not found"));
                     Invoice invoice = new Invoice();
-                    invoice.setOrder(order);
+                    invoice.setOrderId(order.getId());
                     LocalDateTime now = LocalDateTime.now();
                     invoice.setInvoiceDate(now);
                     invoice.setInvoiceNumber(generateInvoiceNumber(now));
@@ -83,10 +80,9 @@ public class InvoiceService {
         long seq = invoiceRepository.countByInvoiceNumberStartingWith(prefix) + 1;
         return prefix + String.format("%04d", seq);
     }
-
-    @Transactional(readOnly = true)
     public InvoiceDTO toDTO(Invoice invoice) {
-        Order order = invoice.getOrder();
+        Order order = invoice.getOrderId() == null ? null
+                : orderRepository.findById(invoice.getOrderId()).orElse(null);
         if (order == null) {
             throw new ResourceNotFoundException("Order not found");
         }
@@ -172,8 +168,6 @@ public class InvoiceService {
         BigDecimal discount = original.subtract(paid);
         return discount.max(BigDecimal.ZERO);
     }
-
-    @Transactional
     public byte[] generatePdf(Long orderId) {
         InvoiceDTO dto = getOrCreate(orderId);
         return buildPdf(dto);

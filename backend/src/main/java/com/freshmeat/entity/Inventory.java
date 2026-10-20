@@ -1,15 +1,23 @@
 package com.freshmeat.entity;
 
-import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+import org.springframework.data.annotation.AccessType;
+import org.springframework.data.annotation.Id;
+import org.springframework.data.mongodb.core.mapping.DBRef;
+import org.springframework.data.mongodb.core.index.Indexed;
+import org.springframework.data.mongodb.core.mapping.Document;
 
 import java.time.LocalDateTime;
 
-@Entity
-@Table(name = "inventory")
+/**
+ * MongoDB document. One inventory row per product is kept by the unique
+ * index on {@code productId} (the old {@code product_id} unique constraint).
+ */
+@Document(collection = "inventory")
+@AccessType(AccessType.Type.FIELD)
 @Getter
 @Setter
 @NoArgsConstructor
@@ -17,36 +25,28 @@ import java.time.LocalDateTime;
 public class Inventory {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @OneToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "product_id", nullable = false, unique = true)
+    /** Plain copy of {@link #product}'s id — the unique key of this row. */
+    @Indexed(name = "idx_inventory_product", unique = true)
+    private Long productId;
+
+    @DBRef(lazy = true)
     private Product product;
 
-    @Column(name = "current_stock", nullable = false)
     private Integer currentStock = 0;
 
-    @Column(name = "min_stock", nullable = false)
     private Integer minStock = 0;
 
-    @Column(name = "last_restocked_at")
     private LocalDateTime lastRestockedAt;
 
-    @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
-    @Column(name = "updated_at", nullable = false)
     private LocalDateTime updatedAt;
 
-    @PrePersist
-    protected void onCreate() {
-        this.createdAt = LocalDateTime.now();
-        this.updatedAt = LocalDateTime.now();
-    }
-
-    @PreUpdate
-    protected void onUpdate() {
-        this.updatedAt = LocalDateTime.now();
+    /** Keeps the plain {@link #productId} in sync with the object reference. */
+    public void setProduct(Product product) {
+        this.product = product;
+        this.productId = product == null ? null : product.getId();
     }
 }

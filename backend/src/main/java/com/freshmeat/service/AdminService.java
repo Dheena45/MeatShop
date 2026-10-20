@@ -35,9 +35,6 @@ public class AdminService {
     private OrderRepository orderRepository;
 
     @Autowired
-    private OrderItemRepository orderItemRepository;
-
-    @Autowired
     private CategoryRepository categoryRepository;
 
     @Autowired
@@ -105,7 +102,7 @@ public class AdminService {
 
     private List<Map<String, Object>> getTopSellingProducts() {
         List<Map<String, Object>> result = new ArrayList<>();
-        List<Object[]> rows = orderItemRepository.findTopSellingProducts();
+        List<Object[]> rows = orderRepository.findTopSellingProducts();
         for (int i = 0; i < Math.min(5, rows.size()); i++) {
             Object[] row = rows.get(i);
             Map<String, Object> entry = new LinkedHashMap<>();
@@ -118,14 +115,29 @@ public class AdminService {
 
     private List<Map<String, Object>> getCategoryWiseSales() {
         List<Map<String, Object>> result = new ArrayList<>();
-        List<Object[]> rows = orderItemRepository.findCategoryWiseSales();
-        for (Object[] row : rows) {
+        Map<Long, String> names = categoryNames();
+        Map<Long, double[]> byCategory = new LinkedHashMap<>();
+        for (Object[] row : orderRepository.findCategoryWiseSales()) {
+            Long categoryId = (Long) row[0];
+            double[] v = byCategory.computeIfAbsent(categoryId, k -> new double[]{0, 0});
+            v[0] += row[1] == null ? 0 : ((Number) row[1]).doubleValue();
+            v[1] += num(row[2]);
+        }
+        for (Map.Entry<Long, double[]> e : byCategory.entrySet()) {
             Map<String, Object> entry = new LinkedHashMap<>();
-            entry.put("category", row[0] == null ? "Uncategorized" : row[0]);
-            entry.put("sales", row[1]);
+            entry.put("category", e.getKey() == null ? "Uncategorized"
+                    : names.getOrDefault(e.getKey(), "Uncategorized"));
+            entry.put("sales", e.getValue()[1]);
             result.add(entry);
         }
         return result;
+    }
+
+    /** category id -> name, for the sales groupings that only know the id. */
+    private Map<Long, String> categoryNames() {
+        Map<Long, String> names = new HashMap<>();
+        categoryRepository.findAll().forEach(c -> names.put(c.getId(), c.getName()));
+        return names;
     }
 
     public DashboardSummaryDTO getSummary(LocalDate from, LocalDate to) {
@@ -159,7 +171,7 @@ public class AdminService {
         if (daily) {
             Map<LocalDate, double[]> byKey = new HashMap<>();
             for (Object[] row : orderRepository.revenueByDayBetween(range.start, range.end)) {
-                LocalDate day = ((java.sql.Date) row[0]).toLocalDate();
+                LocalDate day = (LocalDate) row[0];
                 byKey.put(day, new double[]{num(row[1]), num(row[2])});
             }
             LocalDate start = range.start.toLocalDate();
@@ -197,7 +209,9 @@ public class AdminService {
             counts.put(s, 0L);
         }
         for (Object[] row : orderRepository.countByStatusBetween(range.start, range.end)) {
-            counts.put((OrderStatus) row[0], ((Number) row[1]).longValue());
+            if (row[0] != null) {
+                counts.put((OrderStatus) row[0], ((Number) row[1]).longValue());
+            }
         }
         List<OrderStatusCountDTO> result = new ArrayList<>();
         for (OrderStatus s : OrderStatus.values()) {
@@ -211,7 +225,7 @@ public class AdminService {
 
     public List<TopProductDTO> getTopProducts(LocalDate from, LocalDate to) {
         DateRange range = resolveRange(from, to);
-        List<Object[]> rows = orderItemRepository.findTopSellingProductsBetween(range.start, range.end);
+        List<Object[]> rows = orderRepository.findTopSellingProductsBetween(range.start, range.end);
         List<TopProductDTO> result = new ArrayList<>();
         for (int i = 0; i < Math.min(5, rows.size()); i++) {
             Object[] row = rows.get(i);
@@ -227,15 +241,28 @@ public class AdminService {
 
     public List<CategorySalesDTO> getCategorySales(LocalDate from, LocalDate to) {
         DateRange range = resolveRange(from, to);
-        List<Object[]> rows = orderItemRepository.findCategoryWiseSalesBetween(range.start, range.end);
-        double total = rows.stream().mapToDouble(r -> num(r[2])).sum();
+        Map<Long, String> names = categoryNames();
+        Map<Long, long[]> quantities = new LinkedHashMap<>();
+        Map<Long, Double> revenues = new LinkedHashMap<>();
+        double total = 0;
+        for (Object[] row : orderRepository.findCategoryWiseSalesBetween(range.start, range.end)) {
+            Long categoryId = (Long) row[0];
+            long qty = row[1] == null ? 0 : ((Number) row[1]).longValue();
+            double revenue = num(row[2]);
+            quantities.computeIfAbsent(categoryId, k -> new long[1])[0] += qty;
+            revenues.merge(categoryId, revenue, Double::sum);
+            total += revenue;
+        }
         List<CategorySalesDTO> result = new ArrayList<>();
-        for (Object[] row : rows) {
+        for (Long categoryId : quantities.keySet()) {
+            long qty = quantities.get(categoryId)[0];
+            double revenue = revenues.getOrDefault(categoryId, 0.0);
             CategorySalesDTO dto = new CategorySalesDTO();
-            dto.setCategory(row[0] == null || ((String) row[0]).isBlank() ? "Other" : (String) row[0]);
-            dto.setQuantity(((Number) row[1]).longValue());
-            dto.setRevenue(num(row[2]));
-            dto.setPercentage(total == 0 ? 0 : Math.round(num(row[2]) / total * 1000.0) / 10.0);
+            dto.setCategory(categoryId == null ? "Other"
+                    : names.getOrDefault(categoryId, "Other"));
+            dto.setQuantity(qty);
+            dto.setRevenue(revenue);
+            dto.setPercentage(total == 0 ? 0 : Math.round(revenue / total * 1000.0) / 10.0);
             result.add(dto);
         }
         return result;
@@ -283,7 +310,7 @@ public class AdminService {
     public List<DashboardOrderRowDTO> getOrders(LocalDate from, LocalDate to) {
         DateRange range = resolveRange(from, to);
         Map<String, List<MonthlyOrderItemDTO>> itemsByOrder = new HashMap<>();
-        for (Object[] row : orderItemRepository.findContributingOrderItemsBetween(range.start, range.end)) {
+        for (Object[] row : orderRepository.findContributingOrderItemsBetween(range.start, range.end)) {
             MonthlyOrderItemDTO item = new MonthlyOrderItemDTO();
             item.setProductName((String) row[1]);
             item.setQuantity(((Number) row[2]).intValue());
@@ -306,7 +333,7 @@ public class AdminService {
 
     public long getTotalItemsSold(LocalDate from, LocalDate to) {
         DateRange range = resolveRange(from, to);
-        return orderItemRepository.sumQuantitySoldBetween(range.start, range.end);
+        return orderRepository.sumQuantitySoldBetween(range.start, range.end);
     }
 
     public YearlySummaryDTO getYearlySummary(LocalDate from, LocalDate to) {
@@ -318,14 +345,16 @@ public class AdminService {
         dto.setTotalSales(sales == null ? 0 : sales);
         long totalOrders = orderRepository.countByCreatedAtBetween(range.start, range.end);
         dto.setTotalOrders(totalOrders);
-        dto.setTotalItemsSold(orderItemRepository.sumQuantitySoldBetween(range.start, range.end));
+        dto.setTotalItemsSold(orderRepository.sumQuantitySoldBetween(range.start, range.end));
 
         Map<OrderStatus, Long> statusCounts = new EnumMap<>(OrderStatus.class);
         for (OrderStatus s : OrderStatus.values()) {
             statusCounts.put(s, 0L);
         }
         for (Object[] row : orderRepository.countByStatusBetween(range.start, range.end)) {
-            statusCounts.put((OrderStatus) row[0], ((Number) row[1]).longValue());
+            if (row[0] != null) {
+                statusCounts.put((OrderStatus) row[0], ((Number) row[1]).longValue());
+            }
         }
         long cancelled = statusCounts.getOrDefault(OrderStatus.CANCELLED, 0L);
         // READY_FOR_PICKUP is the stage between PREPARING and OUT_FOR_DELIVERY, so
@@ -353,18 +382,24 @@ public class AdminService {
         dto.setLowStockProducts(getLowStockProducts().size());
         dto.setOutOfStockProducts(getOutOfStockProducts().size());
 
-        List<Object[]> topProducts = orderItemRepository.findTopSellingProductsBetween(range.start, range.end);
+        List<Object[]> topProducts = orderRepository.findTopSellingProductsBetween(range.start, range.end);
         if (!topProducts.isEmpty()) {
             dto.setBestSellingProduct((String) topProducts.get(0)[1]);
         }
 
         String topCategory = null;
         long topQty = 0;
-        for (Object[] row : orderItemRepository.findCategoryWiseSalesBetween(range.start, range.end)) {
-            long qty = ((Number) row[1]).longValue();
-            if (qty > topQty) {
-                topQty = qty;
-                topCategory = row[0] == null ? "Uncategorized" : (String) row[0];
+        Map<Long, String> categoryNames = categoryNames();
+        Map<Long, Long> quantityByCategory = new LinkedHashMap<>();
+        for (Object[] row : orderRepository.findCategoryWiseSalesBetween(range.start, range.end)) {
+            long qty = row[1] == null ? 0 : ((Number) row[1]).longValue();
+            quantityByCategory.merge((Long) row[0], qty, Long::sum);
+        }
+        for (Map.Entry<Long, Long> e : quantityByCategory.entrySet()) {
+            if (e.getValue() > topQty) {
+                topQty = e.getValue();
+                topCategory = e.getKey() == null ? "Uncategorized"
+                        : categoryNames.getOrDefault(e.getKey(), "Uncategorized");
             }
         }
         if (topQty > 0) {
@@ -388,30 +423,37 @@ public class AdminService {
         Product product = productRepository.findById(productId)
                 .orElseThrow(() -> new ResourceNotFoundException("Product not found"));
 
-        List<OrderItem> items = orderItemRepository.findSalesItemsForProductBetween(productId, range.start, range.end);
-
-        Map<Order, Object[]> byOrder = new LinkedHashMap<>();
-        for (OrderItem oi : items) {
-            long qty = oi.getQuantity() == null ? 0 : oi.getQuantity();
-            BigDecimal amount = oi.getSubtotal() == null ? BigDecimal.ZERO : oi.getSubtotal();
-            Object[] v = byOrder.computeIfAbsent(oi.getOrder(), k -> new Object[]{0L, BigDecimal.ZERO});
-            v[0] = (long) v[0] + qty;
-            v[1] = ((BigDecimal) v[1]).add(amount);
-        }
+        // Orders are already newest first; each order holds its own line items,
+        // so no second lookup is needed to reach them.
+        List<Order> orders = orderRepository.findOrdersForProductBetween(productId, range.start, range.end);
 
         long totalQuantity = 0;
         BigDecimal totalAmount = BigDecimal.ZERO;
+        LocalDateTime lastSold = null;
         List<ProductSalesOrderDTO> recentOrders = new ArrayList<>();
-        for (Map.Entry<Order, Object[]> e : byOrder.entrySet()) {
-            Order o = e.getKey();
-            Object[] v = e.getValue();
-            totalQuantity += (long) v[0];
-            totalAmount = totalAmount.add((BigDecimal) v[1]);
+        for (Order o : orders) {
+            long quantity = 0;
+            BigDecimal amount = BigDecimal.ZERO;
+            for (OrderItem oi : o.getItems()) {
+                if (!productId.equals(oi.getProductId())) {
+                    continue;
+                }
+                quantity += oi.getQuantity() == null ? 0 : oi.getQuantity();
+                amount = amount.add(oi.getSubtotal() == null ? BigDecimal.ZERO : oi.getSubtotal());
+            }
+            if (quantity == 0) {
+                continue;
+            }
+            if (lastSold == null || (o.getCreatedAt() != null && o.getCreatedAt().isAfter(lastSold))) {
+                lastSold = o.getCreatedAt();
+            }
+            totalQuantity += quantity;
+            totalAmount = totalAmount.add(amount);
 
             ProductSalesOrderDTO row = new ProductSalesOrderDTO();
             row.setOrderNumber(o.getOrderNumber());
-            row.setQuantity((long) v[0]);
-            row.setAmount((BigDecimal) v[1]);
+            row.setQuantity(quantity);
+            row.setAmount(amount);
             row.setOrderDate(o.getCreatedAt());
             row.setStatus(o.getStatus() == null ? "" : o.getStatus().name());
             recentOrders.add(row);
@@ -425,9 +467,9 @@ public class AdminService {
         dto.setProductId(product.getId());
         dto.setProductName(product.getName());
         dto.setCategoryName(product.getCategory() == null ? null : product.getCategory().getName());
-        dto.setLastSoldDate(items.isEmpty() ? null : items.get(0).getOrder().getCreatedAt().toLocalDate());
+        dto.setLastSoldDate(lastSold == null ? null : lastSold.toLocalDate());
         dto.setTotalQuantitySold(totalQuantity);
-        dto.setTotalOrders(byOrder.size());
+        dto.setTotalOrders(recentOrders.size());
         dto.setTotalSalesAmount(totalAmount.doubleValue());
         dto.setAverageSellingPrice(average);
         dto.setCurrentStock(product.getStockQuantity() == null ? 0 : product.getStockQuantity());

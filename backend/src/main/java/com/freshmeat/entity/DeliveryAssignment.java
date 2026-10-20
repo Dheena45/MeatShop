@@ -1,11 +1,15 @@
 package com.freshmeat.entity;
 
 import com.freshmeat.enums.DeliveryAssignmentStatus;
-import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+import org.springframework.data.annotation.AccessType;
+import org.springframework.data.annotation.Id;
+import org.springframework.data.mongodb.core.mapping.DBRef;
+import org.springframework.data.mongodb.core.index.Indexed;
+import org.springframework.data.mongodb.core.mapping.Document;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -14,23 +18,21 @@ import java.time.LocalDateTime;
  * One row of delivery history for an order.
  * <p>
  * The order number, customer and delivery address are NOT duplicated here: the
- * assignment always points at the {@link Order}, which already stores an
- * immutable snapshot of the address as it was at checkout.
+ * assignment stores a plain {@code orderId} and reads the rest from the order
+ * when a DTO is built. Order, delivery boy and assigning admin are each kept
+ * as a plain id (what every query and dashboard count filters on) plus a lazy
+ * {@code @DBRef} for the few paths that need the user/order document; the
+ * custom setters keep the pairs in sync.
  * <p>
- * There is deliberately no cascade from {@code orders} or {@code users}: orders
- * are never deleted and delivery boys are only ever soft-deactivated
- * ({@code enabled = false}), so the foreign keys below always resolve. Should an
+ * There is deliberately no cascade from orders or users: orders are never
+ * deleted and delivery boys are only ever soft-deactivated
+ * ({@code enabled = false}), so the references always resolve. Should an
  * account ever be removed while an append-only assignment row remains, the read
  * side ({@code DeliveryInfoMapper}) resolves the boy by id and simply treats a
- * missing one as {@code null} instead of touching the lazy proxy.
+ * missing one as {@code null}.
  */
-@Entity
-@Table(name = "delivery_assignments", indexes = {
-        @Index(name = "idx_da_order", columnList = "order_id"),
-        @Index(name = "idx_da_boy", columnList = "delivery_boy_id"),
-        @Index(name = "idx_da_status", columnList = "status"),
-        @Index(name = "idx_da_assigned", columnList = "assigned_at")
-})
+@Document(collection = "delivery_assignments")
+@AccessType(AccessType.Type.FIELD)
 @Getter
 @Setter
 @NoArgsConstructor
@@ -38,24 +40,30 @@ import java.time.LocalDateTime;
 public class DeliveryAssignment {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "order_id", nullable = false)
+    /** Plain copy of {@link #order}'s id — every board query filters on it. */
+    @Indexed(name = "idx_da_order")
+    private Long orderId;
+
+    @DBRef(lazy = true)
     private Order order;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "delivery_boy_id", nullable = false)
+    /** Plain copy of {@link #deliveryBoy}'s id — scoped "my list" queries use it. */
+    @Indexed(name = "idx_da_boy")
+    private Long deliveryBoyId;
+
+    @DBRef(lazy = true)
     private User deliveryBoy;
 
     /** The admin who handed this order over (null for rows created before this column existed). */
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "assigned_by_id")
+    @Indexed(name = "idx_da_assigned_by")
+    private Long assignedById;
+
+    @DBRef(lazy = true)
     private User assignedBy;
 
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 20)
+    @Indexed(name = "idx_da_status")
     private DeliveryAssignmentStatus status = DeliveryAssignmentStatus.ASSIGNED;
 
     /**
@@ -64,28 +72,35 @@ public class DeliveryAssignment {
      * the exact date/slot that was promised, even if the customer's checkout slot
      * or the calendar changes later. Plain {@link LocalDate} — no timezone shift.
      */
-    @Column(name = "delivery_date")
     private LocalDate deliveryDate;
 
-    @Column(name = "delivery_slot", length = 30)
     private String deliverySlot;
 
-    @Column(name = "assigned_at", nullable = false)
+    @Indexed(name = "idx_da_assigned")
     private LocalDateTime assignedAt;
 
-    @Column(name = "started_at")
     private LocalDateTime startedAt;
 
-    @Column(name = "completed_at")
     private LocalDateTime completedAt;
 
-    @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
-    @PrePersist
-    protected void onCreate() {
-        this.createdAt = LocalDateTime.now();
-        if (this.assignedAt == null) this.assignedAt = this.createdAt;
+    /** Keeps the plain {@link #orderId} in sync with the object reference. */
+    public void setOrder(Order order) {
+        this.order = order;
+        this.orderId = order == null ? null : order.getId();
+    }
+
+    /** Keeps the plain {@link #deliveryBoyId} in sync with the object reference. */
+    public void setDeliveryBoy(User deliveryBoy) {
+        this.deliveryBoy = deliveryBoy;
+        this.deliveryBoyId = deliveryBoy == null ? null : deliveryBoy.getId();
+    }
+
+    /** Keeps the plain {@link #assignedById} in sync with the object reference. */
+    public void setAssignedBy(User assignedBy) {
+        this.assignedBy = assignedBy;
+        this.assignedById = assignedBy == null ? null : assignedBy.getId();
     }
 
     /** True while this row is the one an order is currently assigned through. */

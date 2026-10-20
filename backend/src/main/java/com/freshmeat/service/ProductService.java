@@ -3,28 +3,32 @@ package com.freshmeat.service;
 import com.freshmeat.dto.ProductDTO;
 import com.freshmeat.dto.ProductDetailDTO;
 import com.freshmeat.entity.Category;
+import com.freshmeat.entity.Order;
 import com.freshmeat.entity.Product;
 import com.freshmeat.exception.ConflictException;
 import com.freshmeat.exception.ResourceNotFoundException;
 import com.freshmeat.repository.CartItemRepository;
 import com.freshmeat.repository.CategoryRepository;
 import com.freshmeat.repository.InventoryRepository;
-import com.freshmeat.repository.OrderItemRepository;
+import com.freshmeat.repository.OrderRepository;
 import com.freshmeat.repository.ProductRepository;
-import jakarta.persistence.criteria.Predicate;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
-import org.springframework.data.jpa.domain.Specification;
+import org.springframework.data.mongodb.core.MongoTemplate;
+import org.springframework.data.mongodb.core.query.Criteria;
+import org.springframework.data.mongodb.core.query.Query;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
-import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 @Service
@@ -37,7 +41,7 @@ public class ProductService {
     private CategoryRepository categoryRepository;
 
     @Autowired
-    private OrderItemRepository orderItemRepository;
+    private OrderRepository orderRepository;
 
     @Autowired
     private CartItemRepository cartItemRepository;
@@ -47,6 +51,9 @@ public class ProductService {
 
     @Autowired
     private FileStorageService fileStorageService;
+
+    @Autowired
+    private MongoTemplate mongoTemplate;
 
     public Page<ProductDTO> searchProducts(String search, Long categoryId,
                                            BigDecimal minPrice, BigDecimal maxPrice,
@@ -64,48 +71,55 @@ public class ProductService {
                 minRating, inStock, sort, page, size);
     }
 
+    /**
+     * The JPA {@code Specification} is gone (Mongo has no criteria API for it);
+     * the same predicate list is built with Mongo {@link Criteria}. Paging is
+     * preserved by counting the matches first and then fetching the requested
+     * slice with the matching sort — the same contract as the old
+     * {@code findAll(spec, pageable)}.
+     * <p>
+     * A keyword also matches the category name: matching category ids are
+     * resolved first (exactly what the old {@code join} did) rather than
+     * denormalising the name into each product.
+     */
     private Page<ProductDTO> searchInternal(boolean onlyAvailable, String search, Long categoryId,
                                             BigDecimal minPrice, BigDecimal maxPrice,
                                             Double minRating, Boolean inStock,
                                             String sort, int page, int size) {
 
-        Specification<Product> spec = (root, query, cb) -> {
-            List<Predicate> predicates = new ArrayList<>();
-            if (onlyAvailable) {
-                predicates.add(cb.equal(root.get("available"), true));
-            }
+        List<Criteria> predicates = new java.util.ArrayList<>();
+        if (onlyAvailable) {
+            predicates.add(Criteria.where("available").is(true));
+        }
+        if (search != null && !search.isBlank()) {
+            Pattern contains = Pattern.compile(Pattern.quote(search), Pattern.CASE_INSENSITIVE);
+            List<Long> matchingCategoryIds = mongoTemplate.find(
+                            Query.query(Criteria.where("name").regex(contains)), Category.class)
+                    .stream().map(Category::getId).toList();
+            predicates.add(new Criteria().orOperator(
+                    Criteria.where("name").regex(contains),
+                    Criteria.where("shortDescription").regex(contains),
+                    Criteria.where("categoryId").in(matchingCategoryIds)));
+        }
+        if (categoryId != null) {
+            predicates.add(Criteria.where("categoryId").is(categoryId));
+        }
+        if (minPrice != null) {
+            predicates.add(Criteria.where("pricePerKg").gte(minPrice));
+        }
+        if (maxPrice != null) {
+            predicates.add(Criteria.where("pricePerKg").lte(maxPrice));
+        }
+        if (minRating != null) {
+            predicates.add(Criteria.where("avgRating").gte(minRating));
+        }
+        if (inStock != null && inStock) {
+            predicates.add(Criteria.where("stockQuantity").gt(0));
+        }
 
-            if (search != null && !search.isBlank()) {
-                String pattern = "%" + search.toLowerCase() + "%";
-                predicates.add(cb.or(
-                        cb.like(cb.lower(root.get("name")), pattern),
-                        cb.like(cb.lower(root.get("shortDescription")), pattern),
-                        cb.like(cb.lower(root.get("category").get("name")), pattern)
-                ));
-            }
-
-            if (categoryId != null) {
-                predicates.add(cb.equal(root.get("category").get("id"), categoryId));
-            }
-
-            if (minPrice != null) {
-                predicates.add(cb.greaterThanOrEqualTo(root.get("pricePerKg"), minPrice));
-            }
-
-            if (maxPrice != null) {
-                predicates.add(cb.lessThanOrEqualTo(root.get("pricePerKg"), maxPrice));
-            }
-
-            if (minRating != null) {
-                predicates.add(cb.greaterThanOrEqualTo(root.get("avgRating"), minRating));
-            }
-
-            if (inStock != null && inStock) {
-                predicates.add(cb.greaterThan(root.get("stockQuantity"), 0));
-            }
-
-            return cb.and(predicates.toArray(new Predicate[0]));
-        };
+        Criteria criteria = predicates.isEmpty()
+                ? new Criteria()
+                : new Criteria().andOperator(predicates.toArray(new Criteria[0]));
 
         Sort sortBy = switch (sort == null ? "" : sort) {
             case "price_asc" -> Sort.by("pricePerKg").ascending();
@@ -116,8 +130,13 @@ public class ProductService {
             default -> Sort.by("createdAt").descending();
         };
 
+        Query query = Query.query(criteria);
+        long total = mongoTemplate.count(query, Product.class);
+
         Pageable pageable = PageRequest.of(page, size, sortBy);
-        return productRepository.findAll(spec, pageable).map(this::toDTO);
+        query.with(pageable);
+        List<ProductDTO> content = toDTOs(mongoTemplate.find(query, Product.class));
+        return new PageImpl<>(content, pageable, total);
     }
 
     public ProductDetailDTO getProductDetail(Long id) {
@@ -140,29 +159,46 @@ public class ProductService {
         dto.setFreshToday(product.getFreshToday());
         dto.setAvgRating(product.getAvgRating());
         dto.setReviewCount(product.getReviewCount());
-        dto.setCategoryId(product.getCategory().getId());
-        dto.setCategoryName(product.getCategory().getName());
+        dto.setCategoryId(product.getCategoryId());
+        dto.setCategoryName(categoryName(product));
         dto.setCuttingOptions(product.getCuttingOptions());
 
         return dto;
     }
 
     public List<ProductDTO> getBestSellers() {
-        return productRepository.findTop8ByAvailableTrueOrderByReviewCountDesc()
-                .stream().map(this::toDTO).collect(Collectors.toList());
+        return toDTOs(productRepository.findTop8ByAvailableTrueOrderByReviewCountDesc());
     }
 
     public List<ProductDTO> getFreshProducts() {
-        return productRepository.findByFreshTodayTrueAndAvailableTrue()
-                .stream().map(this::toDTO).collect(Collectors.toList());
+        return toDTOs(productRepository.findByFreshTodayTrueAndAvailableTrue());
     }
 
     public List<ProductDTO> getPopularProducts() {
-        return productRepository.findPopularProducts().stream()
-                .limit(8).map(this::toDTO).collect(Collectors.toList());
+        return toDTOs(productRepository.findPopularProducts().stream().limit(8).toList());
     }
 
-    @Transactional
+    /**
+     * Maps a page of products to DTOs with <b>one</b> extra query for all their
+     * category names, instead of one per product (which is what the old JPA
+     * {@code @ManyToOne} effectively hid behind Hibernate's first-level cache).
+     */
+    private List<ProductDTO> toDTOs(List<Product> products) {
+        List<Long> categoryIds = products.stream()
+                .map(Product::getCategoryId)
+                .filter(java.util.Objects::nonNull)
+                .distinct()
+                .toList();
+        Map<Long, String> names = new HashMap<>();
+        if (!categoryIds.isEmpty()) {
+            categoryRepository.findAllById(categoryIds)
+                    .forEach(c -> names.put(c.getId(), c.getName()));
+        }
+        return products.stream()
+                .map(p -> toDTO(p, names.get(p.getCategoryId())))
+                .collect(Collectors.toList());
+    }
+
     public ProductDTO createProduct(ProductDTO dto) {
         Category category = categoryRepository.findById(dto.getCategoryId())
                 .orElseThrow(() -> new ResourceNotFoundException("Category not found"));
@@ -173,12 +209,11 @@ public class ProductService {
         return toDTO(product);
     }
 
-    @Transactional
     public ProductDTO updateProduct(Long id, ProductDTO dto) {
         Product product = productRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Product not found"));
 
-        Category category = product.getCategory();
+        Category category = categoryRepository.findById(product.getCategoryId()).orElse(null);
         if (dto.getCategoryId() != null) {
             category = categoryRepository.findById(dto.getCategoryId())
                     .orElseThrow(() -> new ResourceNotFoundException("Category not found"));
@@ -195,14 +230,15 @@ public class ProductService {
         return toDTO(product);
     }
 
-    @Transactional
     public void deleteProduct(Long id) {
         Product product = productRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Product not found"));
 
-        // Preserve historical order data: products referenced by order items
-        // must not be physically removed, otherwise past orders break.
-        if (orderItemRepository.countByProductId(id) > 0) {
+        // Preserve historical order data: products referenced by order lines must
+        // not be physically removed, otherwise past orders break. Order lines are
+        // embedded in the order document now, so the check is a count over orders
+        // instead of a join table.
+        if (isProductUsedInOrders(id)) {
             throw new ConflictException(
                     "This product cannot be permanently deleted because it is used in existing orders. You can deactivate it instead.");
         }
@@ -212,12 +248,9 @@ public class ProductService {
         inventoryRepository.deleteByProductId(id);
         fileStorageService.deleteUploadedFile(product.getImageUrl());
 
-        // JPA removes the element collection (product_cutting_options).
         productRepository.delete(product);
-        productRepository.flush();
     }
 
-    @Transactional
     public void toggleProduct(Long id) {
         Product product = productRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Product not found"));
@@ -225,7 +258,6 @@ public class ProductService {
         productRepository.save(product);
     }
 
-    @Transactional
     public void updateStock(Long id, Integer quantity) {
         Product product = productRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Product not found"));
@@ -261,6 +293,11 @@ public class ProductService {
     }
 
     public ProductDTO toDTO(Product product) {
+        return toDTO(product, categoryName(product));
+    }
+
+    /** DTO with an already-resolved category name (used by the batch paths). */
+    private ProductDTO toDTO(Product product, String categoryName) {
         ProductDTO dto = new ProductDTO();
         dto.setId(product.getId());
         dto.setName(product.getName());
@@ -274,8 +311,8 @@ public class ProductService {
         dto.setImageUrl(product.getImageUrl());
         dto.setAvailable(product.getAvailable());
         dto.setFreshToday(product.getFreshToday());
-        dto.setCategoryId(product.getCategory() != null ? product.getCategory().getId() : null);
-        dto.setCategoryName(product.getCategory() != null ? product.getCategory().getName() : null);
+        dto.setCategoryId(product.getCategoryId());
+        dto.setCategoryName(categoryName);
         dto.setCuttingOptions(product.getCuttingOptions());
         dto.setAvgRating(product.getAvgRating());
         dto.setReviewCount(product.getReviewCount());
@@ -290,5 +327,24 @@ public class ProductService {
             return price.subtract(discountAmount).setScale(2, RoundingMode.HALF_UP);
         }
         return price;
+    }
+
+    /**
+     * The category name is read from the plain {@code categoryId} rather than from
+     * the lazy DBRef: touching a Mongo lazy reference always issues a query, while
+     * the id is already in hand.
+     */
+    private String categoryName(Product product) {
+        if (product.getCategoryId() == null) {
+            return null;
+        }
+        return categoryRepository.findById(product.getCategoryId())
+                .map(Category::getName)
+                .orElse(null);
+    }
+
+    private boolean isProductUsedInOrders(Long productId) {
+        return mongoTemplate.exists(
+                Query.query(Criteria.where("items.productId").is(productId)), Order.class);
     }
 }

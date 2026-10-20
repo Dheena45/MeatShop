@@ -91,7 +91,7 @@ public class ProfileController {
         User user = authService.getCurrentUser();
         DeliveryAddress address = addressRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Address not found"));
-        if (!address.getUser().getId().equals(user.getId())) {
+        if (!user.getId().equals(address.getUserId())) {
             throw new ResourceNotFoundException("Address not found");
         }
         applyDTO(address, dto);
@@ -109,7 +109,7 @@ public class ProfileController {
         User user = authService.getCurrentUser();
         DeliveryAddress address = addressRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Address not found"));
-        if (!address.getUser().getId().equals(user.getId())) {
+        if (!user.getId().equals(address.getUserId())) {
             throw new ResourceNotFoundException("Address not found");
         }
         addressRepository.delete(address);

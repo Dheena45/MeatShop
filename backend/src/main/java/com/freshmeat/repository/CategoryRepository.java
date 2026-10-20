@@ -1,12 +1,16 @@
 package com.freshmeat.repository;
 
 import com.freshmeat.entity.Category;
-import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.mongodb.repository.MongoRepository;
 
 import java.util.List;
 import java.util.Optional;
 
-public interface CategoryRepository extends JpaRepository<Category, Long> {
+/**
+ * All methods are plain derived queries — every filter uses a stored field, and
+ * name lookups stay case-sensitive/insensitive exactly as they were on MySQL.
+ */
+public interface CategoryRepository extends MongoRepository<Category, Long> {
 
     Optional<Category> findByName(String name);
 
