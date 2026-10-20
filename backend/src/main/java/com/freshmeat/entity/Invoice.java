@@ -1,40 +1,41 @@
 package com.freshmeat.entity;
 
-import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+import org.springframework.data.annotation.AccessType;
+import org.springframework.data.annotation.Id;
+import org.springframework.data.mongodb.core.index.Indexed;
+import org.springframework.data.mongodb.core.mapping.Document;
 
 import java.time.LocalDateTime;
 
-@Entity
-@Table(name = "invoices", indexes = {
-        @Index(name = "idx_invoices_order", columnList = "order_id", unique = true)
-})
+/**
+ * MongoDB document — kept as its own collection (invoices are generated
+ * independently of order loads and are never embedded into the order).
+ * <p>
+ * The order association is a plain {@code orderId}: {@code InvoiceService}
+ * loads the order through {@code OrderRepository} when it needs to build a
+ * DTO, which also means an invoice never drags an entire order (with its
+ * embedded items) into memory just to print its number.
+ */
+@Document(collection = "invoices")
+@AccessType(AccessType.Type.FIELD)
 @Getter
 @Setter
 @NoArgsConstructor
 public class Invoice {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @OneToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "order_id", nullable = false, unique = true)
-    private Order order;
+    @Indexed(name = "idx_invoices_order", unique = true)
+    private Long orderId;
 
-    @Column(name = "invoice_number", nullable = false, unique = true, length = 30)
+    @Indexed(name = "idx_invoices_number", unique = true)
     private String invoiceNumber;
 
-    @Column(name = "invoice_date", nullable = false)
     private LocalDateTime invoiceDate;
 
-    @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
-
-    @PrePersist
-    protected void onCreate() {
-        this.createdAt = LocalDateTime.now();
-    }
 }

@@ -1,19 +1,26 @@
 package com.freshmeat.entity;
 
 import com.freshmeat.enums.Role;
-import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+import org.springframework.data.annotation.AccessType;
+import org.springframework.data.annotation.Id;
+import org.springframework.data.mongodb.core.index.Indexed;
+import org.springframework.data.mongodb.core.mapping.Document;
 
 import java.time.LocalDateTime;
 
-@Entity
-@Table(name = "users", indexes = {
-        @Index(name = "idx_users_email", columnList = "email", unique = true),
-        @Index(name = "idx_users_role", columnList = "role")
-})
+/**
+ * MongoDB document. Numeric id, unique e-mail and unique phone are all
+ * preserved from the MySQL schema: ids come from
+ * {@link com.freshmeat.repository.SequenceGenerator} (via the entity lifecycle
+ * callback) and the unique indexes from the {@link Indexed} annotations
+ * (auto-index-creation is enabled).
+ */
+@Document(collection = "users")
+@AccessType(AccessType.Type.FIELD)
 @Getter
 @Setter
 @NoArgsConstructor
@@ -21,42 +28,24 @@ import java.time.LocalDateTime;
 public class User {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(nullable = false, length = 100)
     private String name;
 
-    @Column(nullable = false, unique = true, length = 150)
+    @Indexed(name = "idx_users_email", unique = true)
     private String email;
 
-    @Column(nullable = false, unique = true, length = 20)
+    @Indexed(name = "idx_users_phone", unique = true)
     private String phone;
 
-    @Column(nullable = false)
     private String password;
 
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 20)
+    @Indexed(name = "idx_users_role")
     private Role role = Role.CUSTOMER;
 
-    @Column(nullable = false)
     private Boolean enabled = true;
 
-    @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
-    @Column(name = "updated_at", nullable = false)
     private LocalDateTime updatedAt;
-
-    @PrePersist
-    protected void onCreate() {
-        this.createdAt = LocalDateTime.now();
-        this.updatedAt = LocalDateTime.now();
-    }
-
-    @PreUpdate
-    protected void onUpdate() {
-        this.updatedAt = LocalDateTime.now();
-    }
 }

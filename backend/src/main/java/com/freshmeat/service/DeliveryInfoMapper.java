@@ -13,11 +13,9 @@ import com.freshmeat.enums.PaymentMethod;
 import com.freshmeat.enums.PaymentStatus;
 import com.freshmeat.enums.Role;
 import com.freshmeat.repository.DeliveryAssignmentRepository;
-import com.freshmeat.repository.PaymentRepository;
 import com.freshmeat.repository.UserRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -72,9 +70,6 @@ public class DeliveryInfoMapper {
     private DeliveryAssignmentRepository deliveryAssignmentRepository;
 
     @Autowired
-    private PaymentRepository paymentRepository;
-
-    @Autowired
     private UserRepository userRepository;
 
     /**
@@ -119,7 +114,7 @@ public class DeliveryInfoMapper {
 
     public boolean hasOpenAssignment(Long orderId) {
         return !deliveryAssignmentRepository
-                .findOpenByOrderId(orderId, OPEN_STATUSES)
+                .findByOrderIdAndStatusInOrderByAssignedAtDesc(orderId, OPEN_STATUSES)
                 .isEmpty();
     }
 
@@ -133,8 +128,6 @@ public class DeliveryInfoMapper {
         if (orderIds == null || orderIds.isEmpty()) return Collections.emptySet();
         return new java.util.HashSet<>(deliveryAssignmentRepository.findAssignedOrderIds(orderIds, OPEN_STATUSES));
     }
-
-    @Transactional(readOnly = true)
     public DeliveryInfoDTO build(Order order, User viewer) {
         return buildAll(Collections.singletonList(order), viewer).get(order.getId());
     }
@@ -146,7 +139,6 @@ public class DeliveryInfoMapper {
      * for an admin, and the action flags are only ever enabled for the boy who
      * owns the assignment.
      */
-    @Transactional(readOnly = true)
     public Map<Long, DeliveryInfoDTO> buildAll(List<Order> orders, User viewer) {
         Map<Long, DeliveryInfoDTO> result = new LinkedHashMap<>();
         if (orders == null || orders.isEmpty()) return result;
@@ -156,22 +148,21 @@ public class DeliveryInfoMapper {
         Map<Long, List<DeliveryAssignment>> byOrder = new HashMap<>();
         Set<Long> boyIds = new HashSet<>();
         for (DeliveryAssignment a : deliveryAssignmentRepository.findByOrderIdInOrderByAssignedAtAsc(orderIds)) {
-            byOrder.computeIfAbsent(a.getOrder().getId(), k -> new ArrayList<>()).add(a);
-            User boy = a.getDeliveryBoy();
-            // Reading the id off a lazy proxy never initializes it, so this is
-            // safe even when the account behind the id no longer exists.
-            if (boy != null && boy.getId() != null) boyIds.add(boy.getId());
+            byOrder.computeIfAbsent(a.getOrderId(), k -> new ArrayList<>()).add(a);
+            // The plain deliveryBoyId is read instead of the DBRef: in Mongo a
+            // lazy reference loads its document on any method call, so the id
+            // would cost a query (and blow up for a removed account).
+            if (a.getDeliveryBoyId() != null) boyIds.add(a.getDeliveryBoyId());
+            // The assigning admin is shown by name, so it is resolved in the same
+            // batch instead of through the lazy reference.
+            if (a.getAssignedById() != null) boyIds.add(a.getAssignedById());
         }
         Map<Long, User> boys = loadUsers(boyIds);
 
-        Map<Long, Payment> payments = new HashMap<>();
-        for (Payment p : paymentRepository.findByOrderIdIn(orderIds)) {
-            payments.put(p.getOrder().getId(), p);
-        }
-
         for (Order order : orders) {
             List<DeliveryAssignment> history = byOrder.getOrDefault(order.getId(), Collections.emptyList());
-            result.put(order.getId(), assemble(order, payments.get(order.getId()), history, boys, viewer));
+            // The payment is embedded in the order, so no extra query is needed.
+            result.put(order.getId(), assemble(order, order.getPayment(), history, boys, viewer));
         }
         return result;
     }
@@ -192,9 +183,15 @@ public class DeliveryInfoMapper {
 
     /** The assignment's delivery boy, or {@code null} if that account is gone. */
     private User deliveryBoyOf(DeliveryAssignment a, Map<Long, User> boys) {
-        if (a == null || a.getDeliveryBoy() == null) return null;
-        Long id = a.getDeliveryBoy().getId();
-        return id == null ? null : boys.get(id);
+        if (a == null || a.getDeliveryBoyId() == null) return null;
+        return boys.get(a.getDeliveryBoyId());
+    }
+
+    /** Display name of a user id, or {@code null} when that account is gone. */
+    private String nameOf(Long userId, Map<Long, User> users) {
+        if (userId == null) return null;
+        User user = users.get(userId);
+        return user == null ? null : user.getName();
     }
 
     private void applyDeliveryBoy(DeliveryInfoDTO info, DeliveryAssignment a, Map<Long, User> boys) {
@@ -214,7 +211,7 @@ public class DeliveryInfoMapper {
         List<DeliveryAssignmentDTO> historyDtos = new ArrayList<>(history.size());
         for (DeliveryAssignment a : history) {
             if (open == null && OPEN_STATUSES.contains(a.getStatus())) open = a;
-            historyDtos.add(toDto(a, boys));
+            historyDtos.add(toDto(a, order, boys));
         }
         info.setHistory(historyDtos);
 
@@ -230,7 +227,7 @@ public class DeliveryInfoMapper {
             info.setAssignedAt(open.getAssignedAt());
             info.setStartedAt(open.getStartedAt());
             info.setCompletedAt(open.getCompletedAt());
-            info.setAssignedBy(open.getAssignedBy() != null ? open.getAssignedBy().getName() : null);
+            info.setAssignedBy(nameOf(open.getAssignedById(), boys));
             applyDeliveryBoy(info, open, boys);
         } else {
             // Fall back to the most recent historical row so a delivered order
@@ -244,7 +241,7 @@ public class DeliveryInfoMapper {
                 info.setAssignedAt(latest.getAssignedAt());
                 info.setStartedAt(latest.getStartedAt());
                 info.setCompletedAt(latest.getCompletedAt());
-                info.setAssignedBy(latest.getAssignedBy() != null ? latest.getAssignedBy().getName() : null);
+                info.setAssignedBy(nameOf(latest.getAssignedById(), boys));
                 applyDeliveryBoy(info, latest, boys);
             }
         }
@@ -279,19 +276,26 @@ public class DeliveryInfoMapper {
                 && payment != null && payment.getPaymentStatus() == PaymentStatus.PAID);
     }
 
-    public DeliveryAssignmentDTO toDto(DeliveryAssignment a) {
+    /**
+     * Assignment row as a DTO. The order is passed in because the assignment only
+     * stores the order id — its number (kept for display) lives on the order.
+     */
+    public DeliveryAssignmentDTO toDto(DeliveryAssignment a, Order order) {
         Set<Long> ids = new HashSet<>();
-        if (a != null && a.getDeliveryBoy() != null && a.getDeliveryBoy().getId() != null) {
-            ids.add(a.getDeliveryBoy().getId());
+        if (a != null && a.getDeliveryBoyId() != null) {
+            ids.add(a.getDeliveryBoyId());
         }
-        return toDto(a, loadUsers(ids));
+        if (a != null && a.getAssignedById() != null) {
+            ids.add(a.getAssignedById());
+        }
+        return toDto(a, order, loadUsers(ids));
     }
 
-    private DeliveryAssignmentDTO toDto(DeliveryAssignment a, Map<Long, User> boys) {
+    private DeliveryAssignmentDTO toDto(DeliveryAssignment a, Order order, Map<Long, User> boys) {
         DeliveryAssignmentDTO dto = new DeliveryAssignmentDTO();
         dto.setId(a.getId());
-        dto.setOrderId(a.getOrder() != null ? a.getOrder().getId() : null);
-        dto.setOrderNumber(a.getOrder() != null ? a.getOrder().getOrderNumber() : null);
+        dto.setOrderId(a.getOrderId() != null ? a.getOrderId() : (order != null ? order.getId() : null));
+        dto.setOrderNumber(order != null ? order.getOrderNumber() : null);
         User boy = deliveryBoyOf(a, boys);
         dto.setDeliveryBoyId(boy != null ? boy.getId() : null);
         dto.setDeliveryBoyName(boy != null ? boy.getName() : null);
@@ -302,7 +306,7 @@ public class DeliveryInfoMapper {
         dto.setAssignedAt(a.getAssignedAt());
         dto.setStartedAt(a.getStartedAt());
         dto.setCompletedAt(a.getCompletedAt());
-        dto.setAssignedBy(a.getAssignedBy() != null ? a.getAssignedBy().getName() : null);
+        dto.setAssignedBy(nameOf(a.getAssignedById(), boys));
         return dto;
     }
 

@@ -5,32 +5,50 @@ import com.freshmeat.entity.Payment;
 import com.freshmeat.enums.PaymentMethod;
 import com.freshmeat.enums.PaymentStatus;
 import com.freshmeat.exception.ConflictException;
-import com.freshmeat.repository.PaymentRepository;
+import com.freshmeat.repository.OrderRepository;
+import com.freshmeat.repository.SequenceGenerator;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
+/**
+ * Payment lifecycle for an order.
+ * <p>
+ * The payment is <b>embedded</b> in its order document, so there is no payment
+ * repository anymore: every mutation writes the whole order, which also means a
+ * status change can never be persisted while the order it belongs to is not.
+ * The caller keeps ownership of when to save; each method here mutates the
+ * embedded payment and persists it through {@link OrderRepository}.
+ */
 @Service
 public class PaymentService {
 
     @Autowired
-    private PaymentRepository paymentRepository;
+    private OrderRepository orderRepository;
+
+    @Autowired
+    private SequenceGenerator sequenceGenerator;
 
     public Payment createPayment(Order order, PaymentMethod method, BigDecimal amount) {
         Payment payment = new Payment();
-        payment.setOrder(order);
+        // Embedded objects never pass through the root-document lifecycle
+        // callback, so the numeric id is handed out here.
+        payment.setId(sequenceGenerator.nextId(Payment.class.getName()));
         payment.setAmount(amount);
         payment.setPaymentMethod(method);
         payment.setPaymentStatus(PaymentStatus.PENDING);
+        payment.setCreatedAt(LocalDateTime.now());
+        payment.setUpdatedAt(LocalDateTime.now());
 
         if (method == PaymentMethod.ONLINE && amount.compareTo(BigDecimal.ZERO) == 0) {
             payment.setPaymentStatus(PaymentStatus.PAID);
             payment.setPaidAt(LocalDateTime.now());
         }
 
-        return paymentRepository.save(payment);
+        order.setPayment(payment);
+        return payment;
     }
 
     public Payment markAsPaid(Order order) {
@@ -40,7 +58,8 @@ public class PaymentService {
         }
         payment.setPaymentStatus(PaymentStatus.PAID);
         payment.setPaidAt(LocalDateTime.now());
-        return paymentRepository.save(payment);
+        payment.setUpdatedAt(LocalDateTime.now());
+        return orderRepository.save(order).getPayment();
     }
 
     public Payment markPaymentReceived(Order order, String transactionRef) {
@@ -58,10 +77,11 @@ public class PaymentService {
         }
         payment.setPaymentStatus(PaymentStatus.PAID);
         payment.setPaidAt(LocalDateTime.now());
+        payment.setUpdatedAt(LocalDateTime.now());
         if (transactionRef != null && !transactionRef.isBlank()) {
             payment.setTransactionRef(transactionRef.trim());
         }
-        return paymentRepository.save(payment);
+        return orderRepository.save(order).getPayment();
     }
 
     /**
@@ -82,10 +102,11 @@ public class PaymentService {
         }
         payment.setPaymentStatus(PaymentStatus.PAID);
         payment.setPaidAt(LocalDateTime.now());
+        payment.setUpdatedAt(LocalDateTime.now());
         if (transactionRef != null && !transactionRef.isBlank()) {
             payment.setTransactionRef(transactionRef.trim());
         }
-        return paymentRepository.save(payment);
+        return orderRepository.save(order).getPayment();
     }
 
     /**
@@ -110,10 +131,16 @@ public class PaymentService {
         }
         payment.setPaymentStatus(PaymentStatus.FAILED);
         payment.setPaidAt(null);
-        return paymentRepository.save(payment);
+        payment.setUpdatedAt(LocalDateTime.now());
+        return orderRepository.save(order).getPayment();
     }
 
+    /**
+     * @return the order's embedded payment, or {@code null} when the order has
+     *         none. Previously this was a lookup by order id; the payment now
+     *         travels with the order, so loading it is free.
+     */
     public Payment getByOrder(Order order) {
-        return paymentRepository.findByOrderId(order.getId()).orElse(null);
+        return order == null ? null : order.getPayment();
     }
 }

@@ -6,7 +6,6 @@ import com.freshmeat.exception.ResourceNotFoundException;
 import com.freshmeat.repository.OfferRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.stream.Collectors;
@@ -26,8 +25,6 @@ public class OfferService {
         return offerRepository.findAll().stream()
                 .map(this::toDTO).collect(Collectors.toList());
     }
-
-    @Transactional
     public OfferDTO createOffer(OfferDTO dto) {
         Offer offer = new Offer();
         applyDTO(offer, dto);
@@ -35,8 +32,6 @@ public class OfferService {
         offer = offerRepository.save(offer);
         return toDTO(offer);
     }
-
-    @Transactional
     public OfferDTO updateOffer(Long id, OfferDTO dto) {
         Offer offer = offerRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Offer not found"));
@@ -44,16 +39,12 @@ public class OfferService {
         offer = offerRepository.save(offer);
         return toDTO(offer);
     }
-
-    @Transactional
     public void toggleOffer(Long id) {
         Offer offer = offerRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Offer not found"));
         offer.setActive(!offer.getActive());
         offerRepository.save(offer);
     }
-
-    @Transactional
     public void deleteOffer(Long id) {
         offerRepository.deleteById(id);
     }

@@ -17,7 +17,6 @@ import com.freshmeat.repository.CartRepository;
 import com.freshmeat.repository.ProductRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -45,7 +44,7 @@ public class CartService {
     private static final BigDecimal FREE_DELIVERY_THRESHOLD = new BigDecimal("499");
 
     private Cart getOrCreateCart(User user) {
-        return cartRepository.findByUser(user).orElseGet(() -> {
+        return cartRepository.findByUserId(user.getId()).orElseGet(() -> {
             Cart cart = new Cart();
             cart.setUser(user);
             return cartRepository.save(cart);
@@ -82,8 +81,6 @@ public class CartService {
         dto.setGrandTotal(grandTotal);
         return dto;
     }
-
-    @Transactional
     public CartDTO addItem(AddCartItemRequest request) {
         User user = authService.getCurrentUser();
         Cart cart = getOrCreateCart(user);
@@ -132,7 +129,7 @@ public class CartService {
             cartItemRepository.save(existing);
         } else {
             CartItem item = new CartItem();
-            item.setCart(cart);
+            item.setCartId(cart.getId());
             item.setProduct(product);
             item.setQuantity(qty);
             item.setCuttingOption(cutting);
@@ -143,8 +140,6 @@ public class CartService {
 
         return getCart();
     }
-
-    @Transactional
     public CartDTO updateItem(Long itemId, UpdateCartItemRequest request) {
         User user = authService.getCurrentUser();
         Cart cart = getOrCreateCart(user);
@@ -174,8 +169,6 @@ public class CartService {
 
         return getCart();
     }
-
-    @Transactional
     public void removeItem(Long itemId) {
         User user = authService.getCurrentUser();
         Cart cart = getOrCreateCart(user);
@@ -183,8 +176,6 @@ public class CartService {
                 .orElseThrow(() -> new ResourceNotFoundException("Cart item not found"));
         cartItemRepository.delete(item);
     }
-
-    @Transactional
     public void clearCart() {
         User user = authService.getCurrentUser();
         Cart cart = getOrCreateCart(user);
@@ -218,7 +209,7 @@ public class CartService {
         Product product = item.getProduct();
         CartItemDTO dto = new CartItemDTO();
         dto.setId(item.getId());
-        dto.setProductId(product.getId());
+        dto.setProductId(item.getProductId() != null ? item.getProductId() : product.getId());
         dto.setProductName(product.getName());
         dto.setProductImage(product.getImageUrl());
         dto.setCategoryName(product.getCategory() != null ? product.getCategory().getName() : "");

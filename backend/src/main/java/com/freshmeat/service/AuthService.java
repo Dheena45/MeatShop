@@ -25,7 +25,6 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -66,8 +65,6 @@ public class AuthService {
 
     @Value("${app.admin.setup.secret:#{null}}")
     private String adminSetupSecret;
-
-    @Transactional
     public AuthResponse register(RegisterRequest request) {
         String name = request.getName() == null ? null : request.getName().trim();
         String email = request.getEmail() == null ? null : request.getEmail().trim();
@@ -100,8 +97,6 @@ public class AuthService {
         String token = jwtUtil.generateToken(user.getId(), user.getEmail(), user.getRole().name());
         return new AuthResponse(token, user.getId(), user.getName(), user.getEmail(), user.getRole().name());
     }
-
-    @Transactional
     public AuthResponse setupAdmin(com.freshmeat.dto.AdminSetupRequest request) {
         if (adminSetupSecret == null || adminSetupSecret.isBlank()) {
             throw new UnauthorizedException("Admin setup is not configured. Set app.admin.setup.secret environment variable.");
@@ -178,8 +173,6 @@ public class AuthService {
     public UserDTO getProfile() {
         return toDTO(getCurrentUser());
     }
-
-    @Transactional
     public UserDTO updateProfile(String name, String phone) {
         User user = getCurrentUser();
         user.setName(name);
@@ -187,8 +180,6 @@ public class AuthService {
         user = userRepository.save(user);
         return toDTO(user);
     }
-
-    @Transactional
     public void changePassword(String currentPassword, String newPassword) {
         User user = getCurrentUser();
         if (!passwordEncoder.matches(currentPassword, user.getPassword())) {
@@ -197,8 +188,6 @@ public class AuthService {
         user.setPassword(passwordEncoder.encode(newPassword));
         userRepository.save(user);
     }
-
-    @Transactional
     public void forgotPassword(String email) {
         if (email == null || email.isBlank()) {
             throw new BadRequestException("Email is required");
@@ -207,7 +196,7 @@ public class AuthService {
         userRepository.findByEmail(normalized)
                 .filter(User::getEnabled)
                 .ifPresent(user -> {
-                    passwordResetTokenRepository.deleteAllByUserId(user.getId());
+                    passwordResetTokenRepository.deleteByUserId(user.getId());
                     String rawToken = generateResetToken();
                     PasswordResetToken reset = new PasswordResetToken();
                     reset.setTokenHash(sha256(rawToken));
@@ -218,8 +207,6 @@ public class AuthService {
                             baseUrl, rawToken);
                 });
     }
-
-    @Transactional
     public void resetPassword(String token, String newPassword) {
         if (token == null || token.isBlank()) {
             throw new BadRequestException("Invalid or expired reset link");

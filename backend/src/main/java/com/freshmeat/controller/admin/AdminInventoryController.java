@@ -70,7 +70,7 @@ public class AdminInventoryController {
         InventoryDTO dto = new InventoryDTO();
         dto.setProductId(product.getId());
         dto.setProductName(product.getName());
-        dto.setCategoryId(product.getCategory() != null ? product.getCategory().getId() : null);
+        dto.setCategoryId(product.getCategoryId());
         dto.setCategoryName(product.getCategory() != null ? product.getCategory().getName() : "");
         dto.setCurrentStock(inventory.getCurrentStock());
         dto.setMinStock(inventory.getMinStock());

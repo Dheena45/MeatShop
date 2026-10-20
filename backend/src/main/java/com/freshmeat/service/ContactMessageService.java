@@ -9,7 +9,6 @@ import com.freshmeat.exception.ResourceNotFoundException;
 import com.freshmeat.repository.ContactMessageRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.stream.Collectors;
@@ -22,8 +21,6 @@ public class ContactMessageService {
 
     @Autowired
     private AuthService authService;
-
-    @Transactional
     public ContactMessageDTO submitMessage(ContactMessageRequest request) {
         // Only logged-in customers can send messages: the customer is resolved
         // from the JWT/security context, so the submitted email can never be
@@ -41,7 +38,7 @@ public class ContactMessageService {
 
     public List<ContactMessageDTO> adminGetAll(ContactMessageStatus status) {
         List<ContactMessage> messages = status == null
-                ? contactMessageRepository.findAllByOrderByCreatedAtDesc()
+                ? contactMessageRepository.findAllNewestFirst()
                 : contactMessageRepository.findByStatusOrderByCreatedAtDesc(status);
         return messages.stream().map(this::toDTO).collect(Collectors.toList());
     }
@@ -49,22 +46,16 @@ public class ContactMessageService {
     public ContactMessageDTO adminGetById(Long id) {
         return toDTO(getMessage(id));
     }
-
-    @Transactional
     public ContactMessageDTO markRead(Long id) {
         ContactMessage message = getMessage(id);
         message.setStatus(ContactMessageStatus.READ);
         return toDTO(contactMessageRepository.save(message));
     }
-
-    @Transactional
     public ContactMessageDTO markResolved(Long id) {
         ContactMessage message = getMessage(id);
         message.setStatus(ContactMessageStatus.RESOLVED);
         return toDTO(contactMessageRepository.save(message));
     }
-
-    @Transactional
     public void adminDelete(Long id) {
         ContactMessage message = getMessage(id);
         contactMessageRepository.delete(message);
@@ -84,7 +75,7 @@ public class ContactMessageService {
         dto.setCreatedAt(message.getCreatedAt());
         dto.setUpdatedAt(message.getUpdatedAt());
         if (message.getUser() != null) {
-            dto.setUserId(message.getUser().getId());
+            dto.setUserId(message.getUserId());
             dto.setCustomerName(message.getUser().getName());
         }
         return dto;

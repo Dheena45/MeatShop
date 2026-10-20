@@ -2,15 +2,12 @@ package com.freshmeat.repository;
 
 import com.freshmeat.entity.User;
 import com.freshmeat.enums.Role;
-import org.springframework.data.jpa.repository.JpaRepository;
-import org.springframework.data.jpa.repository.Query;
-import org.springframework.data.repository.query.Param;
+import org.springframework.data.mongodb.repository.MongoRepository;
 
-import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
-public interface UserRepository extends JpaRepository<User, Long> {
+public interface UserRepository extends MongoRepository<User, Long>, UserRepositoryCustom {
 
     Optional<User> findByEmail(String email);
 
@@ -29,12 +26,4 @@ public interface UserRepository extends JpaRepository<User, Long> {
     long countByRole(Role role);
 
     long countByRoleAndEnabled(Role role, Boolean enabled);
-
-    @Query("SELECT COUNT(u) FROM User u WHERE u.role = 'CUSTOMER' AND u.createdAt >= :start AND u.createdAt < :end")
-    long countNewCustomersBetween(@Param("start") LocalDateTime start, @Param("end") LocalDateTime end);
-
-    @Query("SELECT u FROM User u WHERE LOWER(u.name) LIKE LOWER(CONCAT('%', :keyword, '%')) " +
-           "OR LOWER(u.email) LIKE LOWER(CONCAT('%', :keyword, '%')) " +
-           "OR u.phone LIKE CONCAT('%', :keyword, '%')")
-    List<User> search(@Param("keyword") String keyword);
 }

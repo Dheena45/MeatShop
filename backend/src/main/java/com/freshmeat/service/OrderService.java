@@ -17,12 +17,11 @@ import com.freshmeat.exception.StockException;
 import com.freshmeat.exception.UnauthorizedException;
 import com.freshmeat.repository.CartItemRepository;
 import com.freshmeat.repository.DeliveryAssignmentRepository;
-import com.freshmeat.repository.OrderItemRepository;
 import com.freshmeat.repository.OrderRepository;
 import com.freshmeat.repository.ProductRepository;
+import com.freshmeat.repository.SequenceGenerator;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -43,7 +42,7 @@ public class OrderService {
     private OrderRepository orderRepository;
 
     @Autowired
-    private OrderItemRepository orderItemRepository;
+    private SequenceGenerator sequenceGenerator;
 
     @Autowired
     private CartService cartService;
@@ -90,7 +89,16 @@ public class OrderService {
         NEXT_STATUS.put(OrderStatus.OUT_FOR_DELIVERY, OrderStatus.DELIVERED);
     }
 
-    @Transactional
+    /**
+     * Checkout.
+     * <p>
+     * Order, line items and payment form a <b>single</b> document, so the whole
+     * checkout is one insert: nothing can half-succeed. Product stock and the
+     * cart rows live in other collections and are written separately (Mongo has
+     * no cross-document atomicity without a transaction), so the order document
+     * — the thing the customer is waiting for — is written last, after every
+     * precondition has been validated.
+     */
     public OrderDTO placeOrder(OrderRequest request) {
         User user = authService.getCurrentUser();
 
@@ -136,12 +144,14 @@ public class OrderService {
         order.setDeliveryPincode(request.getDeliveryPincode());
         order.setNotes(request.getNotes());
         order.setOrderNumber(generateOrderNumber());
-        order = orderRepository.save(order);
 
         for (CartItem item : selectedItems) {
             Product product = item.getProduct();
             OrderItem oi = new OrderItem();
-            oi.setOrder(order);
+            // Embedded value objects do not pass through the root-document
+            // lifecycle callback, so they get their own numeric id here.
+            oi.setId(sequenceGenerator.nextId(OrderItem.class.getName()));
+            oi.setCreatedAt(LocalDateTime.now());
             oi.setProduct(product);
             oi.setProductName(product.getName());
             oi.setQuantity(item.getQuantity());
@@ -150,11 +160,7 @@ public class OrderService {
 
             BigDecimal lineTotal = item.getUnitPrice().multiply(BigDecimal.valueOf(item.getQuantity()));
             oi.setSubtotal(lineTotal);
-            orderItemRepository.save(oi);
             order.getItems().add(oi);
-
-            product.setStockQuantity(product.getStockQuantity() - item.getQuantity());
-            productRepository.save(product);
         }
 
         PaymentMethod method = parsePaymentMethod(request.getPaymentMethod());
@@ -164,11 +170,19 @@ public class OrderService {
         // stays here until the admin confirms it. COD payment itself is always
         // created PENDING and only becomes PAID when cash is collected at the door.
         order.setStatus(OrderStatus.PLACED);
+        paymentService.createPayment(order, method, order.getGrandTotal());
+
+        // One insert carries the order, its items and its payment. It is written
+        // BEFORE the stock and cart side effects on purpose: if a later step
+        // fails, the customer still has a real order (and an operator can fix the
+        // stock), whereas decrementing stock first and then failing to save would
+        // leave inventory silently reduced for an order that never existed.
         order = orderRepository.save(order);
 
-        order.setPayment(paymentService.createPayment(order, method, order.getGrandTotal()));
-
         for (CartItem item : selectedItems) {
+            Product product = item.getProduct();
+            product.setStockQuantity(product.getStockQuantity() - item.getQuantity());
+            productRepository.save(product);
             cartItemRepository.delete(item);
         }
 
@@ -179,7 +193,7 @@ public class OrderService {
         User user = authService.getCurrentUser();
         Order order = orderRepository.findById(orderId)
                 .orElseThrow(() -> new ResourceNotFoundException("Order not found"));
-        if (order.getUser() != null && order.getUser().getId().equals(user.getId())) {
+        if (user.getId().equals(order.getUserId())) {
             return toDTO(order);
         }
         if (user.getRole().name().equals("ADMIN")) {
@@ -201,7 +215,6 @@ public class OrderService {
      * carries the delivery block (assignment, delivery boy, timestamps) that
      * the admin Orders and Delivery pages display.
      */
-    @Transactional(readOnly = true)
     public OrderDTO getOrderForAdmin(Long orderId) {
         User user = authService.getCurrentUser();
         if (user.getRole() != Role.ADMIN) {
@@ -212,13 +225,11 @@ public class OrderService {
         dto.setDelivery(deliveryInfoMapper.build(order, null));
         return dto;
     }
-
-    @Transactional
     public void cancelOrder(Long orderId) {
         User user = authService.getCurrentUser();
         Order order = orderRepository.findById(orderId)
                 .orElseThrow(() -> new ResourceNotFoundException("Order not found"));
-        if (!order.getUser().getId().equals(user.getId())) {
+        if (!user.getId().equals(order.getUserId())) {
             throw new UnauthorizedException("You do not have access to this order");
         }
         if (order.getStatus() == OrderStatus.OUT_FOR_DELIVERY) {
@@ -236,12 +247,26 @@ public class OrderService {
 
     private void applyCancellation(Order order) {
         order.setStatus(OrderStatus.CANCELLED);
+
+        // The payment is embedded in the order now, so its status change has to
+        // be applied *before* the save — it goes out with the same document.
+        Payment payment = order.getPayment();
+        if (payment != null && payment.getPaymentStatus() != PaymentStatus.PAID) {
+            // Only an unpaid payment (PENDING / FAILED) is closed out. A payment
+            // that was already PAID is left exactly as it is: cancelling the
+            // order must not fake a refund or erase the fact the money was
+            // collected. No refund workflow exists yet, so refunds stay a
+            // separate, manual concern; the payment row itself is never deleted.
+            payment.setPaymentStatus(PaymentStatus.CANCELLED);
+        }
+
         orderRepository.save(order);
 
         // A cancelled order must disappear from the delivery board. The
         // assignment rows themselves are kept as history, only their open rows
         // are closed out.
-        for (DeliveryAssignment assignment : deliveryAssignmentRepository.findOpenByOrderId(
+        for (DeliveryAssignment assignment
+                : deliveryAssignmentRepository.findByOrderIdAndStatusInOrderByAssignedAtDesc(
                 order.getId(), EnumSet.of(DeliveryAssignmentStatus.ASSIGNED,
                         DeliveryAssignmentStatus.STARTED))) {
             assignment.setStatus(DeliveryAssignmentStatus.CANCELLED);
@@ -253,16 +278,6 @@ public class OrderService {
             product.setStockQuantity(product.getStockQuantity() + oi.getQuantity());
             productRepository.save(product);
         });
-
-        Payment payment = order.getPayment();
-        if (payment != null && payment.getPaymentStatus() != PaymentStatus.PAID) {
-            // Only an unpaid payment (PENDING / FAILED) is closed out. A payment
-            // that was already PAID is left exactly as it is: cancelling the
-            // order must not fake a refund or erase the fact the money was
-            // collected. No refund workflow exists yet, so refunds stay a
-            // separate, manual concern; the payment row itself is never deleted.
-            payment.setPaymentStatus(PaymentStatus.CANCELLED);
-        }
     }
 
     /**
@@ -271,7 +286,6 @@ public class OrderService {
      * hand-over steps — OUT_FOR_DELIVERY and DELIVERED — are deliberately
      * rejected here so only the assigned Delivery Boy can perform them.
      */
-    @Transactional
     public OrderDTO updateOrderStatus(Long orderId, OrderStatus newStatus) {
         return changeOrderStatus(orderId, newStatus, false);
     }
@@ -281,7 +295,6 @@ public class OrderService {
      * {@link DeliveryService}, which first verifies the caller owns the open
      * assignment; the admin endpoint never calls this.
      */
-    @Transactional
     public OrderDTO applyDeliveryBoyStatusChange(Long orderId, OrderStatus newStatus) {
         return changeOrderStatus(orderId, newStatus, true);
     }
@@ -379,7 +392,6 @@ public class OrderService {
      * verifies he is the assigned delivery boy for the order. Marking a payment
      * received never changes the order status.
      */
-    @Transactional
     public OrderDTO markPaymentReceived(Long orderId, String transactionRef) {
         User user = authService.getCurrentUser();
         if (user.getRole() != Role.ADMIN) {
@@ -400,13 +412,12 @@ public class OrderService {
      * confirmed for fulfilment. On failure the payment moves PENDING -> FAILED
      * and the order stays unconfirmed (PLACED) until a retry succeeds.
      */
-    @Transactional
     public OrderDTO confirmOnlinePayment(Long orderId, boolean success, String transactionRef) {
         Order order = orderRepository.findById(orderId)
                 .orElseThrow(() -> new ResourceNotFoundException("Order not found"));
 
         User user = authService.getCurrentUser();
-        boolean isOwner = order.getUser() != null && order.getUser().getId().equals(user.getId());
+        boolean isOwner = user.getId().equals(order.getUserId());
         boolean isAdmin = "ADMIN".equals(user.getRole().name());
         if (!isOwner && !isAdmin) {
             throw new UnauthorizedException("You do not have access to this order");
@@ -458,7 +469,6 @@ public class OrderService {
      * the assigned delivery boy and the delivery timestamps without an extra
      * request per row. Customer-facing DTOs never include it.
      */
-    @Transactional(readOnly = true)
     public List<OrderDTO> adminSearch(OrderStatus status, String keyword) {
         User user = authService.getCurrentUser();
         if (user.getRole() != Role.ADMIN) {
@@ -499,8 +509,13 @@ public class OrderService {
         BigDecimal discount = BigDecimal.ZERO;
 
         for (CartItem item : items) {
-            BigDecimal originalPrice = productRepository.findById(item.getProduct().getId())
-                    .orElseThrow().getPricePerKg();
+            // The product is already materialised on the cart item (the DBRef is
+            // read for its price), so no extra lookup is needed here.
+            Product product = item.getProduct();
+            if (product == null || product.getPricePerKg() == null) {
+                throw new ResourceNotFoundException("Product not found");
+            }
+            BigDecimal originalPrice = product.getPricePerKg();
             BigDecimal lineOriginal = originalPrice.multiply(BigDecimal.valueOf(item.getQuantity()));
             subtotal = subtotal.add(lineOriginal);
             discount = discount.add(lineOriginal.subtract(item.getSubtotal()));
@@ -580,7 +595,7 @@ public class OrderService {
             for (OrderItem oi : order.getItems()) {
                 OrderLineDTO line = new OrderLineDTO();
                 line.setId(oi.getId());
-                line.setProductId(oi.getProduct() != null ? oi.getProduct().getId() : null);
+                line.setProductId(oi.getProductId());
                 line.setProductName(oi.getProductName());
                 line.setProductImage(oi.getProduct() != null ? oi.getProduct().getImageUrl() : null);
                 line.setQuantity(oi.getQuantity());

@@ -1,17 +1,19 @@
 package com.freshmeat.entity;
 
-import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+import org.springframework.data.annotation.AccessType;
+import org.springframework.data.annotation.Id;
+import org.springframework.data.mongodb.core.mapping.DBRef;
+import org.springframework.data.mongodb.core.index.Indexed;
+import org.springframework.data.mongodb.core.mapping.Document;
 
 import java.time.LocalDateTime;
 
-@Entity
-@Table(name = "delivery_addresses", indexes = {
-        @Index(name = "idx_address_user", columnList = "user_id")
-})
+@Document(collection = "delivery_addresses")
+@AccessType(AccessType.Type.FIELD)
 @Getter
 @Setter
 @NoArgsConstructor
@@ -19,51 +21,38 @@ import java.time.LocalDateTime;
 public class DeliveryAddress {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "user_id", nullable = false)
+    /** Plain copy of {@link #user}'s id — what every address query filters on. */
+    @Indexed(name = "idx_address_user")
+    private Long userId;
+
+    @DBRef(lazy = true)
     private User user;
 
-    @Column(name = "label", length = 50)
     private String label;
 
-    @Column(name = "door_number", length = 50)
     private String doorNumber;
 
-    @Column(name = "street", length = 150)
     private String street;
 
-    @Column(name = "area", length = 100)
     private String area;
 
-    @Column(name = "city", nullable = false, length = 100)
     private String city;
 
-    @Column(name = "state", length = 100)
     private String state;
 
-    @Column(name = "pincode", nullable = false, length = 10)
     private String pincode;
 
-    @Column(name = "is_default", nullable = false)
     private Boolean isDefault = false;
 
-    @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
-    @Column(name = "updated_at", nullable = false)
     private LocalDateTime updatedAt;
 
-    @PrePersist
-    protected void onCreate() {
-        this.createdAt = LocalDateTime.now();
-        this.updatedAt = LocalDateTime.now();
-    }
-
-    @PreUpdate
-    protected void onUpdate() {
-        this.updatedAt = LocalDateTime.now();
+    /** Keeps the plain {@link #userId} in sync with the object reference. */
+    public void setUser(User user) {
+        this.user = user;
+        this.userId = user == null ? null : user.getId();
     }
 }

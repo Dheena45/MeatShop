@@ -1,21 +1,20 @@
 package com.freshmeat.entity;
 
 import com.freshmeat.enums.ReviewStatus;
-import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+import org.springframework.data.annotation.AccessType;
+import org.springframework.data.annotation.Id;
+import org.springframework.data.mongodb.core.mapping.DBRef;
+import org.springframework.data.mongodb.core.index.Indexed;
+import org.springframework.data.mongodb.core.mapping.Document;
 
 import java.time.LocalDateTime;
 
-@Entity
-@Table(name = "reviews", indexes = {
-        @Index(name = "idx_reviews_user", columnList = "user_id"),
-        @Index(name = "idx_reviews_status", columnList = "status")
-}, uniqueConstraints = {
-        @UniqueConstraint(name = "uk_reviews_order_id", columnNames = "order_id")
-})
+@Document(collection = "reviews")
+@AccessType(AccessType.Type.FIELD)
 @Getter
 @Setter
 @NoArgsConstructor
@@ -23,43 +22,46 @@ import java.time.LocalDateTime;
 public class Review {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "user_id", nullable = false)
+    /** Plain copy of {@link #user}'s id — what the "my reviews" queries filter on. */
+    @Indexed(name = "idx_reviews_user")
+    private Long userId;
+
+    @DBRef(lazy = true)
     private User user;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "order_id")
+    /**
+     * Plain copy of {@link #order}'s id — one review per order, enforced with
+     * {@code existsByOrderId} at insert time (a Mongo unique index cannot back
+     * this: reviews without an order would collide on a missing field).
+     */
+    @Indexed(name = "idx_reviews_order")
+    private Long orderId;
+
+    @DBRef(lazy = true)
     private Order order;
 
-    @Column(columnDefinition = "TEXT")
     private String comment;
 
-    @Column(nullable = false)
     private Integer rating;
 
-    @Enumerated(EnumType.STRING)
-    @Column(name = "status", columnDefinition = "varchar(20) default 'APPROVED'")
+    @Indexed(name = "idx_reviews_status")
     private ReviewStatus status;
 
-    @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
-    @Column(name = "updated_at")
     private LocalDateTime updatedAt;
 
-    @PrePersist
-    protected void onCreate() {
-        this.createdAt = LocalDateTime.now();
-        if (this.status == null) {
-            this.status = ReviewStatus.APPROVED;
-        }
+    /** Keeps the plain {@link #userId} in sync with the object reference. */
+    public void setUser(User user) {
+        this.user = user;
+        this.userId = user == null ? null : user.getId();
     }
 
-    @PreUpdate
-    protected void onUpdate() {
-        this.updatedAt = LocalDateTime.now();
+    /** Keeps the plain {@link #orderId} in sync with the object reference. */
+    public void setOrder(Order order) {
+        this.order = order;
+        this.orderId = order == null ? null : order.getId();
     }
 }

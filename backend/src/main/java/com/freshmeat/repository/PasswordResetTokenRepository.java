@@ -1,18 +1,14 @@
 package com.freshmeat.repository;
 
 import com.freshmeat.entity.PasswordResetToken;
-import org.springframework.data.jpa.repository.JpaRepository;
-import org.springframework.data.jpa.repository.Modifying;
-import org.springframework.data.jpa.repository.Query;
-import org.springframework.data.repository.query.Param;
+import org.springframework.data.mongodb.repository.MongoRepository;
 
 import java.util.Optional;
 
-public interface PasswordResetTokenRepository extends JpaRepository<PasswordResetToken, Long> {
+public interface PasswordResetTokenRepository extends MongoRepository<PasswordResetToken, Long> {
 
     Optional<PasswordResetToken> findByTokenHash(String tokenHash);
 
-    @Modifying
-    @Query("DELETE FROM PasswordResetToken t WHERE t.user.id = :userId")
-    void deleteAllByUserId(@Param("userId") Long userId);
+    /** Derived delete — the old bulk JPQL delete now runs on the stored {@code userId}. */
+    void deleteByUserId(Long userId);
 }

@@ -34,17 +34,18 @@ import com.freshmeat.repository.UserRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.Collections;
 import java.util.EnumSet;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -151,8 +152,6 @@ public class DeliveryService {
     /* ================================================================
        Delivery boy management (admin)
        ================================================================ */
-
-    @Transactional(readOnly = true)
     public List<DeliveryBoyDTO> listDeliveryBoys(String search, Boolean activeOnly) {
         String keyword = normalize(search);
         return userRepository.findByRole(Role.DELIVERY_BOY).stream()
@@ -163,12 +162,9 @@ public class DeliveryService {
     }
 
     /** Only active delivery boys may receive a new assignment. */
-    @Transactional(readOnly = true)
     public List<DeliveryBoyDTO> listActiveDeliveryBoys() {
         return listDeliveryBoys(null, Boolean.TRUE);
     }
-
-    @Transactional
     public DeliveryBoyDTO createDeliveryBoy(DeliveryBoyRequest request) {
         String name = require(request.getName(), "Name is required");
         String email = require(request.getEmail(), "Email is required").toLowerCase(Locale.ROOT);
@@ -194,8 +190,6 @@ public class DeliveryService {
 
         return toDeliveryBoyDTO(boy);
     }
-
-    @Transactional
     public DeliveryBoyDTO updateDeliveryBoy(Long id, DeliveryBoyRequest request) {
         User boy = requireDeliveryBoyEntity(id);
         final Long boyId = boy.getId();
@@ -233,7 +227,6 @@ public class DeliveryService {
      * this row so nothing is lost; an inactive boy simply cannot log in and
      * cannot be picked for a new assignment.
      */
-    @Transactional
     public DeliveryBoyDTO setDeliveryBoyActive(Long id, boolean active) {
         User boy = requireDeliveryBoyEntity(id);
         boy.setEnabled(active);
@@ -257,7 +250,6 @@ public class DeliveryService {
      * contact messages, and defensively any customer-style leftovers) so the
      * delete can never fail on a foreign key.
      */
-    @Transactional
     public void deleteDeliveryBoy(Long id) {
         User boy = requireDeliveryBoyEntity(id);
 
@@ -272,7 +264,7 @@ public class DeliveryService {
         // No delivery history. Clear the remaining rows that reference this user
         // through a foreign key so the delete is safe. None of these hold order,
         // payment or delivery data.
-        passwordResetTokenRepository.deleteAllByUserId(boy.getId());
+        passwordResetTokenRepository.deleteByUserId(boy.getId());
         contactMessageRepository.detachUser(boy.getId());
         reviewRepository.deleteByUserId(boy.getId());
         deliveryAddressRepository.deleteByUserId(boy.getId());
@@ -306,16 +298,14 @@ public class DeliveryService {
                 .countByDeliveryBoyIdAndStatus(boy.getId(), DeliveryAssignmentStatus.COMPLETED));
         LocalDateTime dayStart = LocalDate.now().atStartOfDay();
         dto.setCompletedTodayCount(deliveryAssignmentRepository
-                .countCompletedByDeliveryBoyBetween(boy.getId(), DeliveryAssignmentStatus.COMPLETED,
-                        dayStart, dayStart.plusDays(1)));
+                .countByDeliveryBoyIdAndStatusAndCompletedAtNotNullAndCompletedAtGreaterThanEqualAndCompletedAtLessThan(
+                        boy.getId(), DeliveryAssignmentStatus.COMPLETED, dayStart, dayStart.plusDays(1)));
         return dto;
     }
 
     /* ================================================================
        Admin delivery board
        ================================================================ */
-
-    @Transactional(readOnly = true)
     public List<OrderDTO> adminBoard(DeliveryState state, String search, Long deliveryBoyId, LocalDate date) {
         return enrich(loadBoard(state, search, deliveryBoyId, date), null);
     }
@@ -324,7 +314,6 @@ public class DeliveryService {
      * Counters for the four board cards. They honour the active filters (minus
      * the state tab itself) so the cards always describe the visible rows.
      */
-    @Transactional(readOnly = true)
     public DeliveryBoardSummaryDTO adminBoardSummary(String search, Long deliveryBoyId, LocalDate date) {
         List<Order> all = loadBoard(null, search, deliveryBoyId, date);
         Set<Long> assigned = deliveryInfoMapper.openAssignmentOrderIds(idsOf(all));
@@ -345,8 +334,6 @@ public class DeliveryService {
         }
         return summary;
     }
-
-    @Transactional(readOnly = true)
     public OrderDTO adminDeliveryDetail(Long orderId) {
         Order order = requireOrder(orderId);
         if (order.getStatus() == OrderStatus.CANCELLED) {
@@ -401,13 +388,9 @@ public class DeliveryService {
     /* ================================================================
        Assignment
        ================================================================ */
-
-    @Transactional
     public OrderDTO assign(Long orderId, AssignDeliveryRequest request) {
         return doAssign(orderId, request, false);
     }
-
-    @Transactional
     public OrderDTO reassign(Long orderId, AssignDeliveryRequest request) {
         return doAssign(orderId, request, true);
     }
@@ -434,7 +417,7 @@ public class DeliveryService {
             if (!DeliveryInfoMapper.ASSIGNABLE_STATUSES.contains(order.getStatus())) {
                 throw new ConflictException("This delivery has already started and can no longer be reassigned.");
             }
-            if (open.getDeliveryBoy() != null && open.getDeliveryBoy().getId().equals(boy.getId())) {
+            if (open.getDeliveryBoyId() != null && open.getDeliveryBoyId().equals(boy.getId())) {
                 throw new ConflictException(boy.getName() + " is already handling this order.");
             }
         } else {
@@ -443,15 +426,15 @@ public class DeliveryService {
                         "Only confirmed or preparing orders can be assigned to a Delivery Boy.");
             }
             if (open != null) {
-                if (open.getDeliveryBoy() != null && open.getDeliveryBoy().getId().equals(boy.getId())) {
+                if (open.getDeliveryBoyId() != null && open.getDeliveryBoyId().equals(boy.getId())) {
                     // Already assigned to this boy — nothing to change.
                     return enrichOne(order, null);
                 }
                 // The current handler may be missing (its account was removed).
-                // Resolve its name by id without touching the lazy proxy, so an
+                // Resolve its name by id without touching the lazy reference, so an
                 // orphaned row reads as "another Delivery Boy" instead of failing.
-                User currentBoy = open.getDeliveryBoy() == null ? null
-                        : userRepository.findById(open.getDeliveryBoy().getId()).orElse(null);
+                User currentBoy = open.getDeliveryBoyId() == null ? null
+                        : userRepository.findById(open.getDeliveryBoyId()).orElse(null);
                 String currentName = currentBoy != null ? currentBoy.getName() : "another Delivery Boy";
                 throw new ConflictException("This order is already assigned to "
                         + currentName + ". Use Reassign to hand it over.");
@@ -489,10 +472,9 @@ public class DeliveryService {
     }
 
     /** Closes the open assignment of a cancelled order; history is preserved. */
-    @Transactional
     public void cancelAssignmentsFor(Long orderId) {
-        for (DeliveryAssignment assignment
-                : deliveryAssignmentRepository.findOpenByOrderId(orderId, ACTIVE_ASSIGNMENT_STATUSES)) {
+        for (DeliveryAssignment assignment : deliveryAssignmentRepository
+                .findByOrderIdAndStatusInOrderByAssignedAtDesc(orderId, ACTIVE_ASSIGNMENT_STATUSES)) {
             assignment.setStatus(DeliveryAssignmentStatus.CANCELLED);
             deliveryAssignmentRepository.save(assignment);
         }
@@ -501,8 +483,6 @@ public class DeliveryService {
     /* ================================================================
        Delivery boy dashboard + actions
        ================================================================ */
-
-    @Transactional(readOnly = true)
     public List<OrderDTO> myDeliveries(String search, DeliveryState filter, LocalDate date) {
         User boy = requireCurrentDeliveryBoy();
         List<Order> orders = orderRepository.searchDeliveryBoard(
@@ -528,24 +508,33 @@ public class DeliveryService {
      * Today's work list. "Today" is the assignment date, which is what a driver
      * works from; cancelled orders are never part of the result.
      */
-    @Transactional(readOnly = true)
     public List<OrderDTO> myTodayDeliveries(String search) {
         User boy = requireCurrentDeliveryBoy();
         String keyword = normalize(search);
 
-        List<Order> orders = deliveryAssignmentRepository
+        List<Long> orderIds = deliveryAssignmentRepository
                 .findByDeliveryBoyIdAndStatusInAndAssignedAtBetween(
                         boy.getId(), TODAY_STATUSES, startOfToday(), startOfTomorrow())
                 .stream()
-                .map(DeliveryAssignment::getOrder)
+                .map(DeliveryAssignment::getOrderId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .collect(Collectors.toList());
+
+        // Load the orders in one query instead of letting each lazy order
+        // reference fire its own lookup as the stream is walked.
+        Map<Long, Order> byId = new HashMap<>();
+        orderRepository.findAllById(orderIds).forEach(o -> byId.put(o.getId(), o));
+
+        List<Order> orders = orderIds.stream()
+                .map(byId::get)
+                .filter(Objects::nonNull)
                 .filter(o -> o.getStatus() != OrderStatus.CANCELLED)
                 .filter(o -> matchesOrder(o, keyword))
                 .collect(Collectors.toList());
 
         return enrich(orders, boy);
     }
-
-    @Transactional(readOnly = true)
     public DeliveryBoySummaryDTO mySummary() {
         User boy = requireCurrentDeliveryBoy();
         DeliveryBoySummaryDTO summary = new DeliveryBoySummaryDTO();
@@ -565,7 +554,6 @@ public class DeliveryService {
      * A single delivery for the logged-in delivery boy. Ownership is verified
      * against the assignment table, so swapping the id in the URL yields 403.
      */
-    @Transactional(readOnly = true)
     public OrderDTO myDeliveryDetail(Long orderId) {
         User boy = requireCurrentDeliveryBoy();
         requireOwnedAssignment(orderId, boy);
@@ -576,8 +564,6 @@ public class DeliveryService {
         }
         return enrichOne(order, boy);
     }
-
-    @Transactional
     public OrderDTO startDelivery(Long orderId) {
         User boy = requireCurrentDeliveryBoy();
         Order order = requireOrder(orderId);
@@ -600,8 +586,6 @@ public class DeliveryService {
         markStarted(assignment);
         return enrichOne(order, boy);
     }
-
-    @Transactional
     public OrderDTO markDelivered(Long orderId) {
         User boy = requireCurrentDeliveryBoy();
         Order order = requireOrder(orderId);
@@ -646,7 +630,6 @@ public class DeliveryService {
      * Cash collected at the door. This only touches the payment row — the order
      * stays OUT_FOR_DELIVERY until "Mark Delivered" is pressed separately.
      */
-    @Transactional
     public OrderDTO collectCash(Long orderId, String transactionRef, BigDecimal collectedAmount) {
         User boy = requireCurrentDeliveryBoy();
         Order order = requireOrder(orderId);
@@ -731,8 +714,8 @@ public class DeliveryService {
     private DeliveryAssignment requireOwnedOpenAssignment(Long orderId, User boy) {
         DeliveryAssignment assignment = findOpenAssignment(orderId)
                 .orElseThrow(() -> new ForbiddenException("This order is not assigned for delivery."));
-        if (assignment.getDeliveryBoy() == null
-                || !assignment.getDeliveryBoy().getId().equals(boy.getId())) {
+        if (assignment.getDeliveryBoyId() == null
+                || !assignment.getDeliveryBoyId().equals(boy.getId())) {
             throw new ForbiddenException("Only the assigned Delivery Boy can update this delivery.");
         }
         if (!boy.getEnabled()) {
@@ -744,8 +727,8 @@ public class DeliveryService {
     /** Any historical assignment counts, so a delivered order stays visible. */
     private void requireOwnedAssignment(Long orderId, User boy) {
         boolean owns = deliveryAssignmentRepository.findByOrderIdOrderByAssignedAtAsc(orderId).stream()
-                .anyMatch(a -> a.getDeliveryBoy() != null
-                        && a.getDeliveryBoy().getId().equals(boy.getId()));
+                .anyMatch(a -> a.getDeliveryBoyId() != null
+                        && a.getDeliveryBoyId().equals(boy.getId()));
         if (!owns) {
             throw new ForbiddenException("Only the assigned Delivery Boy can view this delivery.");
         }
@@ -753,7 +736,7 @@ public class DeliveryService {
 
     private Optional<DeliveryAssignment> findOpenAssignment(Long orderId) {
         return deliveryAssignmentRepository
-                .findOpenByOrderId(orderId, LIVE_ASSIGNMENT_STATUSES)
+                .findByOrderIdAndStatusInOrderByAssignedAtDesc(orderId, LIVE_ASSIGNMENT_STATUSES)
                 .stream().findFirst();
     }
 

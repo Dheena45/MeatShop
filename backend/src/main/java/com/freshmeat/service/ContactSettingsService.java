@@ -5,20 +5,15 @@ import com.freshmeat.entity.ContactSettings;
 import com.freshmeat.repository.ContactSettingsRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class ContactSettingsService {
 
     @Autowired
     private ContactSettingsRepository contactSettingsRepository;
-
-    @Transactional
     public ContactSettingsDTO getSettings() {
         return toDTO(getOrCreate());
     }
-
-    @Transactional
     public ContactSettingsDTO updateSettings(ContactSettingsDTO dto) {
         ContactSettings settings = getOrCreate();
         settings.setBusinessDescription(trimNullable(dto.getBusinessDescription()));

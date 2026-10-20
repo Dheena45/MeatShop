@@ -5,20 +5,15 @@ import com.freshmeat.entity.SiteSettings;
 import com.freshmeat.repository.SiteSettingsRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class SiteSettingsService {
 
     @Autowired
     private SiteSettingsRepository siteSettingsRepository;
-
-    @Transactional
     public SiteSettingsDTO getSettings() {
         return toDTO(getOrCreate());
     }
-
-    @Transactional
     public SiteSettingsDTO updateSettings(SiteSettingsDTO dto) {
         SiteSettings settings = getOrCreate();
         settings.setPremiumCuts(dto.getPremiumCuts().trim());

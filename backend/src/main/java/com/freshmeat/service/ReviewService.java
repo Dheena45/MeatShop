@@ -13,7 +13,6 @@ import com.freshmeat.repository.OrderRepository;
 import com.freshmeat.repository.ReviewRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -33,8 +32,6 @@ public class ReviewService {
 
     @Autowired
     private AuthService authService;
-
-    @Transactional
     public ReviewDTO addReview(ReviewDTO request) {
         User user = authService.getCurrentUser();
 
@@ -45,7 +42,7 @@ public class ReviewService {
         Order order = orderRepository.findById(request.getOrderId())
                 .orElseThrow(() -> new ResourceNotFoundException("Order not found"));
 
-        if (!order.getUser().getId().equals(user.getId())) {
+        if (!user.getId().equals(order.getUserId())) {
             throw new UnauthorizedException("You do not have access to this order");
         }
 
@@ -115,16 +112,12 @@ public class ReviewService {
         }
         return reviews.stream().map(this::toDTO).collect(Collectors.toList());
     }
-
-    @Transactional
     public ReviewDTO adminUpdateStatus(Long reviewId, ReviewStatus status) {
         Review review = reviewRepository.findById(reviewId)
                 .orElseThrow(() -> new ResourceNotFoundException("Review not found"));
         review.setStatus(status);
         return toDTO(reviewRepository.save(review));
     }
-
-    @Transactional
     public void adminDelete(Long reviewId) {
         Review review = reviewRepository.findById(reviewId)
                 .orElseThrow(() -> new ResourceNotFoundException("Review not found"));
@@ -134,8 +127,8 @@ public class ReviewService {
     private ReviewDTO toDTO(Review review) {
         ReviewDTO dto = new ReviewDTO();
         dto.setId(review.getId());
-        dto.setUserId(review.getUser() != null ? review.getUser().getId() : null);
-        dto.setOrderId(review.getOrder() != null ? review.getOrder().getId() : null);
+        dto.setUserId(review.getUserId());
+        dto.setOrderId(review.getOrderId());
         dto.setOrderNumber(review.getOrder() != null ? review.getOrder().getOrderNumber() : null);
         dto.setUserEmail(review.getUser() != null ? maskName(review.getUser().getName()) : "Anonymous");
         dto.setCustomerName(review.getUser() != null ? displayName(review.getUser().getName()) : "FreshMeat User");

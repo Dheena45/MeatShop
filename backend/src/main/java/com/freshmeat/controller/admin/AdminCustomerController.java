@@ -16,7 +16,6 @@ import com.freshmeat.repository.ReviewRepository;
 import com.freshmeat.repository.UserRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
-import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -73,8 +72,6 @@ public class AdminCustomerController {
         user = userRepository.save(user);
         return ResponseEntity.ok(ApiResponse.ok("Customer status updated", toDTO(user)));
     }
-
-    @Transactional
     @DeleteMapping("/{id}")
     public ResponseEntity<ApiResponse<Void>> deleteCustomer(@PathVariable Long id) {
         User user = userRepository.findById(id)
@@ -98,7 +95,7 @@ public class AdminCustomerController {
 
         // Remove every remaining record that references the customer through
         // the users foreign key (none of these hold business/revenue data).
-        passwordResetTokenRepository.deleteAllByUserId(id);
+        passwordResetTokenRepository.deleteByUserId(id);
         reviewRepository.deleteByUserId(id);
         deliveryAddressRepository.deleteByUserId(id);
         contactMessageRepository.detachUser(id);

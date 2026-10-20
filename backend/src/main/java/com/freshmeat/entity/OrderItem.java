@@ -1,16 +1,30 @@
 package com.freshmeat.entity;
 
-import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+import org.springframework.data.annotation.AccessType;
+import org.springframework.data.annotation.Id;
+import org.springframework.data.mongodb.core.mapping.DBRef;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
-@Entity
-@Table(name = "order_items")
+/**
+ * One line of an order — <b>embedded</b> inside its {@link Order} document, so
+ * it has no repository and no {@code order} back-reference.
+ * <p>
+ * Id and {@code createdAt} are assigned explicitly where the item is built
+ * (the Mongo lifecycle callback only sees the root of a save, never embedded
+ * value objects). Ids stay numeric so {@code OrderItemDTO.id} and every API
+ * payload keep the shape they had on MySQL.
+ * <p>
+ * The product is a plain {@code productId} plus a lazy {@code @DBRef}; the
+ * custom setter keeps them in sync (called explicitly by OrderService —
+ * Mongo's converter reads embedded fields directly).
+ */
+@AccessType(AccessType.Type.FIELD)
 @Getter
 @Setter
 @NoArgsConstructor
@@ -18,37 +32,29 @@ import java.time.LocalDateTime;
 public class OrderItem {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "order_id", nullable = false)
-    private Order order;
+    /** Plain copy of {@link #product}'s id — survives even if the product is deleted. */
+    private Long productId;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "product_id", nullable = false)
+    @DBRef(lazy = true)
     private Product product;
 
-    @Column(name = "product_name", nullable = false, length = 150)
     private String productName;
 
-    @Column(nullable = false)
     private Integer quantity;
 
-    @Column(name = "cutting_option", length = 50)
     private String cuttingOption;
 
-    @Column(name = "price_per_kg", nullable = false, precision = 10, scale = 2)
     private BigDecimal pricePerKg;
 
-    @Column(nullable = false, precision = 10, scale = 2)
     private BigDecimal subtotal;
 
-    @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
-    @PrePersist
-    protected void onCreate() {
-        this.createdAt = LocalDateTime.now();
+    /** Keeps the plain {@link #productId} in sync with the object reference. */
+    public void setProduct(Product product) {
+        this.product = product;
+        this.productId = product == null ? null : product.getId();
     }
 }

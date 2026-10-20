@@ -1,24 +1,38 @@
 package com.freshmeat.entity;
 
 import com.freshmeat.enums.OrderStatus;
-import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+import org.springframework.data.annotation.AccessType;
+import org.springframework.data.annotation.Id;
+import org.springframework.data.mongodb.core.mapping.DBRef;
+import org.springframework.data.mongodb.core.index.Indexed;
+import org.springframework.data.mongodb.core.mapping.Document;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
-@Entity
-@Table(name = "orders", indexes = {
-        @Index(name = "idx_orders_user", columnList = "user_id"),
-        @Index(name = "idx_orders_number", columnList = "order_number", unique = true),
-        @Index(name = "idx_orders_status", columnList = "status"),
-        @Index(name = "idx_orders_created", columnList = "created_at")
-})
+/**
+ * MongoDB document.
+ * <p>
+ * Three deliberate differences from the old JPA entity:
+ * <ul>
+ *   <li>{@code items} and {@code payment} are <b>embedded</b> — the whole order
+ *       is one document, so checkout, cancellation and the payment status
+ *       change can never end up half-written, and {@code order.getPayment()}
+ *       keeps working without a repository lookup;</li>
+ *   <li>the user is a plain {@code userId} (what every query filters on) plus a
+ *       lazy {@code @DBRef} for the rare path that needs the user document —
+ *       the custom setter keeps them in sync;</li>
+ *   <li>{@code deliveryAssignments} is gone — it was never read anywhere.</li>
+ * </ul>
+ */
+@Document(collection = "orders")
+@AccessType(AccessType.Type.FIELD)
 @Getter
 @Setter
 @NoArgsConstructor
@@ -26,93 +40,65 @@ import java.util.List;
 public class Order {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(name = "order_number", nullable = false, unique = true, length = 30)
+    @Indexed(name = "idx_orders_number", unique = true)
     private String orderNumber;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "user_id", nullable = true)
+    /** Plain copy of {@link #user}'s id — what every order query filters on. */
+    @Indexed(name = "idx_orders_user")
+    private Long userId;
+
+    @DBRef(lazy = true)
     private User user;
 
-    @Column(name = "subtotal", nullable = false, precision = 12, scale = 2)
     private BigDecimal subtotal;
 
-    @Column(name = "discount_amount", precision = 12, scale = 2)
     private BigDecimal discountAmount = BigDecimal.ZERO;
 
-    @Column(name = "delivery_charge", precision = 10, scale = 2)
     private BigDecimal deliveryCharge = BigDecimal.ZERO;
 
-    @Column(name = "tax", precision = 10, scale = 2)
     private BigDecimal tax = BigDecimal.ZERO;
 
-    @Column(name = "grand_total", nullable = false, precision = 12, scale = 2)
     private BigDecimal grandTotal;
 
-    @Column(name = "delivery_slot", length = 30)
     private String deliverySlot;
 
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 30)
+    @Indexed(name = "idx_orders_status")
     private OrderStatus status = OrderStatus.CONFIRMED;
 
-    @Column(name = "delivery_door", length = 50)
     private String deliveryDoor;
 
-    @Column(name = "delivery_street", length = 150)
     private String deliveryStreet;
 
-    @Column(name = "delivery_area", length = 100)
     private String deliveryArea;
 
-    @Column(name = "delivery_city", length = 100)
     private String deliveryCity;
 
-    @Column(name = "delivery_state", length = 100)
     private String deliveryState;
 
-    @Column(name = "delivery_pincode", length = 10)
     private String deliveryPincode;
 
-    @Column(name = "customer_name", length = 100)
     private String customerName;
 
-    @Column(name = "customer_phone", length = 20)
     private String customerPhone;
 
-    @Column(name = "notes", columnDefinition = "TEXT")
     private String notes;
 
-    @OneToMany(mappedBy = "order", fetch = FetchType.LAZY, cascade = CascadeType.ALL, orphanRemoval = true)
+    /** Embedded line items — same document as the order, no cascade needed. */
     private List<OrderItem> items = new ArrayList<>();
 
-    @OneToOne(mappedBy = "order", cascade = CascadeType.ALL, fetch = FetchType.LAZY, orphanRemoval = true)
+    /** Embedded payment — updated together with the order in one save. */
     private Payment payment;
 
-    /**
-     * Append-only delivery trail. No cascade and no orphan removal: assignment
-     * rows are business history and must survive untouched, so the owning
-     * side (DeliveryAssignment) is the only place rows are ever written.
-     */
-    @OneToMany(mappedBy = "order", fetch = FetchType.LAZY)
-    private List<DeliveryAssignment> deliveryAssignments = new ArrayList<>();
-
-    @Column(name = "created_at", nullable = false, updatable = false)
+    @Indexed(name = "idx_orders_created")
     private LocalDateTime createdAt;
 
-    @Column(name = "updated_at", nullable = false)
     private LocalDateTime updatedAt;
 
-    @PrePersist
-    protected void onCreate() {
-        this.createdAt = LocalDateTime.now();
-        this.updatedAt = LocalDateTime.now();
-    }
-
-    @PreUpdate
-    protected void onUpdate() {
-        this.updatedAt = LocalDateTime.now();
+    /** Keeps the plain {@link #userId} in sync with the object reference. */
+    public void setUser(User user) {
+        this.user = user;
+        this.userId = user == null ? null : user.getId();
     }
 }
